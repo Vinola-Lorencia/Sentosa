@@ -21,6 +21,46 @@
                         </div>
 
                         <div>
+                            <x-input-label for="brand" :value="__('Brand')" />
+                            <x-text-input
+                                id="brand"
+                                name="brand"
+                                type="text"
+                                class="mt-1 block w-full"
+                                value="{{ old('brand', $product->brand) }}"
+                            />
+                            <x-input-error :messages="$errors->get('brand')" class="mt-2" />
+                        </div>
+
+                        <div>
+                            <x-input-label for="default_buy_price" :value="__('Default Buy Price')" />
+                            <x-text-input
+                                id="default_buy_price"
+                                name="default_buy_price"
+                                type="number"
+                                step="0.01"
+                                class="mt-1 block w-full"
+                                value="{{ old('default_buy_price', $product->default_buy_price) }}"
+                                required
+                            />
+                            <x-input-error :messages="$errors->get('default_buy_price')" class="mt-2" />  
+                        </div>
+                        
+                        <div>
+                            <x-input-label for="default_buy_discount" :value="__('Default Buy Discount (%)')" />
+                            <x-text-input
+                                id="default_buy_discount"
+                                name="default_buy_discount"
+                                type="number"
+                                step="0.01"
+                                class="mt-1 block w-full"
+                                value="{{ old('default_buy_discount', $product->default_buy_discount) }}"
+                                required
+                            />
+                            <x-input-error :messages="$errors->get('default_buy_discount')" class="mt-2" />     
+                        </div>
+
+                        <div>
                             <x-input-label for="sale_price" :value="__('Sale Price')" />
                             <x-text-input id="sale_price" name="sale_price" type="number" step="0.01" class="mt-1 block w-full" value="{{ old('sale_price', $product->sale_price) }}" required />
                             <x-input-error :messages="$errors->get('sale_price')" class="mt-2" />

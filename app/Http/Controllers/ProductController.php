@@ -24,6 +24,9 @@ class ProductController extends Controller
         $data = $request->validate([
             'product_name' => ['required', 'string', 'max:255'],
             'sale_price' => ['required', 'numeric', 'min:0'],
+            'brand' => ['nullable', 'string', 'max:255'],
+            'default_buy_price' => ['required', 'numeric', 'min:0'],
+            'default_buy_discount' => ['required', 'numeric', 'min:0'],
             'sale_unit' => ['required', 'string', 'max:50'],
             'dus_to_unit' => ['required', 'integer', 'min:1'],
             'stock' => ['required', 'integer', 'min:0'],
@@ -44,6 +47,9 @@ class ProductController extends Controller
         $data = $request->validate([
             'product_name' => ['required', 'string', 'max:255'],
             'sale_price' => ['required', 'numeric', 'min:0'],
+            'brand' => ['nullable', 'string', 'max:255'],
+            'default_buy_price' => ['required', 'numeric', 'min:0'],
+            'default_buy_discount' => ['required', 'numeric', 'min:0'],
             'sale_unit' => ['required', 'string', 'max:50'],
             'dus_to_unit' => ['required', 'integer', 'min:1'],
             'stock' => ['required', 'integer', 'min:0'],

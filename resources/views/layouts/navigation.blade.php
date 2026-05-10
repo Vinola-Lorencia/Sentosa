@@ -80,6 +80,18 @@
                 </div>
             </div>
 
+            <div>
+                <p class="text-xs font-semibold uppercase text-slate-400">Pembelian</p>
+
+                <div class="mt-3 space-y-1">
+                    <a href="{{ route('purchase-orders.index') }}"
+                        class="flex items-center gap-3 px-3 py-2 rounded-2xl text-sm font-medium hover:bg-slate-100
+                        {{ request()->routeIs('purchase-orders.*') ? 'bg-slate-100' : '' }}">
+                        Purchase Orders
+                    </a>
+                </div>
+            </div>
+
             <!-- SETTINGS -->
             <div>
                 <p class="text-xs font-semibold uppercase text-slate-400">Settings</p>

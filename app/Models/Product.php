@@ -13,7 +13,13 @@ class Product extends Model
         'default_buy_discount',
         'sale_price',
         'sale_unit',
+        'purchase_unit',
         'dus_to_unit',
         'stock'
     ];
+
+    public function purchaseOrderDetails()
+    {
+        return $this->hasMany(PurchaseOrderDetail::class, 'product_id', 'id');
+    }
 }

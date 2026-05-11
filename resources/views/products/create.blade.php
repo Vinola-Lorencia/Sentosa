@@ -71,6 +71,13 @@
                             <x-input-error :messages="$errors->get('sale_unit')" class="mt-2" />
                         </div>
 
+
+                        <div>
+                            <x-input-label for="purchase_unit" :value="__('Purchase Unit')" />
+                            <x-text-input id="purchase_unit" name="purchase_unit" type="text" class="mt-1 block w-full" value="{{ old('purchase_unit') }}" required />
+                            <x-input-error :messages="$errors->get('purchase_unit')" class="mt-2" />
+                        </div>
+
                         <div>
                             <x-input-label for="dus_to_unit" :value="__('Dus to Unit')" />
                             <x-text-input id="dus_to_unit" name="dus_to_unit" type="number" class="mt-1 block w-full" value="{{ old('dus_to_unit', 1) }}" required />

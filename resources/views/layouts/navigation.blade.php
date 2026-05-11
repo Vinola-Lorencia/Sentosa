@@ -89,6 +89,11 @@
                         {{ request()->routeIs('purchase-orders.*') ? 'bg-slate-100' : '' }}">
                         Purchase Orders
                     </a>
+                    <a href="{{ route('purchases.index') }}"
+                        class="flex items-center gap-3 px-3 py-2 rounded-2xl text-sm font-medium hover:bg-slate-100
+                        {{ request()->routeIs('purchases.*') ? 'bg-slate-100' : '' }}">
+                        Purchases
+                    </a>
                 </div>
             </div>
 
@@ -153,6 +158,8 @@
             <a href="{{ route('products.index') }}" class="block px-3 py-2 rounded-xl hover:bg-slate-100">Products</a>
             <a href="{{ route('suppliers.index') }}" class="block px-3 py-2 rounded-xl hover:bg-slate-100">Suppliers</a>
             <a href="{{ route('customers.index') }}" class="block px-3 py-2 rounded-xl hover:bg-slate-100">Customers</a>
+            <a href="{{ route('purchase-orders.index') }}" class="block px-3 py-2 rounded-xl hover:bg-slate-100">Purchase Orders</a>
+            <a href="{{ route('purchases.index') }}" class="block px-3 py-2 rounded-xl hover:bg-slate-100">Purchases</a>
             <a href="{{ route('roles.index') }}" class="block px-3 py-2 rounded-xl hover:bg-slate-100">Roles</a>
             <a href="{{ route('users.index') }}" class="block px-3 py-2 rounded-xl hover:bg-slate-100">Users</a>
 

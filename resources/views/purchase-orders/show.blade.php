@@ -47,6 +47,14 @@
                             </th>
 
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                                Purchase Quantity
+                            </th>
+
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                                Purchase Unit
+                            </th>
+
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                                 Qty
                             </th>
 
@@ -80,6 +88,13 @@
                                 </td>
 
                                 <td class="px-6 py-4 whitespace-nowrap">
+                                    {{ $detail->purchase_qty }}
+                                </td>
+
+                                <td class="px-6 py-4 whitespace-nowrap">
+                                    {{ $detail->purchase_unit }}
+
+                                <td class="px-6 py-4 whitespace-nowrap">
                                     {{ $detail->quantity }}
                                 </td>
 
@@ -104,6 +119,20 @@
                         @endforeach
 
                     </tbody>
+                   
+
+                    <tfoot class="bg-gray-50">
+                        <tr>
+                            <td colspan="7" class="px-6 py-4 text-right font-semibold text-gray-700">
+                                Grand Total
+                            </td>
+                            <td class="px-6 py-4 font-bold text-gray-900">
+                                Rp {{ number_format($purchaseOrder->details->sum('subtotal'), 0, ',', '.') }}
+                            </td>
+                        </tr>
+                    </tfoot>
+
+                </table>
 
                 </table>
 

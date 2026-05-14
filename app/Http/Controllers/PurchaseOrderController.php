@@ -101,14 +101,12 @@ class PurchaseOrderController extends Controller
             'discount.*'     => 'required|numeric|min:0|max:100',
         ]);
 
-        // Update header
         $purchaseOrder->supplier_id = $request->supplier_id;
         $purchaseOrder->po_date     = $request->po_date;
         $purchaseOrder->status      = $request->status;
         $purchaseOrder->notes       = $request->notes;
         $purchaseOrder->save();
 
-        // Hapus semua detail lama, simpan ulang yang baru
         $purchaseOrder->details()->delete();
         $this->saveDetails($purchaseOrder->po_id, $request);
 
@@ -128,7 +126,7 @@ class PurchaseOrderController extends Controller
             ->with('success', 'Purchase order deleted successfully.');
     }
 
-     // ─── Get items untuk AJAX di modul Pembelian ─────────────────────────────
+    // ─── Get items untuk AJAX di modul Pembelian ─────────────────────────────
 
     public function getItems(string $id)
     {
@@ -149,6 +147,40 @@ class PurchaseOrderController extends Controller
                 'subtotal'      => $d->subtotal,
             ])
         ]);
+    }
+
+    // ─── Send PO via WhatsApp ─────────────────────────────────────────────────
+
+    public function sendWhatsApp(string $id)
+    {
+        $purchaseOrder = PurchaseOrder::with([
+            'supplier',
+            'details.product'
+        ])->findOrFail($id);
+
+        $supplier = $purchaseOrder->supplier;
+
+        $message  = "PURCHASE ORDER\n";
+        $message .= "PO Number: PO-" . str_pad($purchaseOrder->po_id, 3, '0', STR_PAD_LEFT) . "\n";
+        $message .= "Date: " . $purchaseOrder->po_date . "\n\n";
+        $message .= "Items:\n";
+
+        foreach ($purchaseOrder->details as $detail) {
+            $message .= "- " . $detail->product->product_name;
+            $message .= " | " . $detail->purchase_qty . " " . $detail->purchase_unit;
+            $message .= "\n";
+        }
+
+        $message .= "\nThank you.";
+
+        $phone = preg_replace('/[^0-9]/', '', $supplier->phone);
+        if (substr($phone, 0, 1) == '0') {
+            $phone = '62' . substr($phone, 1);
+        }
+
+        $url = "https://wa.me/" . $phone . "?text=" . urlencode($message);
+
+        return redirect($url);
     }
 
     // ─────────────────────────────────────────────────────────
@@ -172,15 +204,15 @@ class PurchaseOrderController extends Controller
             $subtotal    = $qty * $price * (1 - ($discount / 100));
 
             $detail = new PurchaseOrderDetail();
-            $detail->po_id        = $poId;
-            $detail->product_id   = $productId;
-            $detail->purchase_qty = $purchaseQty;
+            $detail->po_id         = $poId;
+            $detail->product_id    = $productId;
+            $detail->purchase_qty  = $purchaseQty;
             $detail->purchase_unit = $product->purchase_unit;
-            $detail->quantity     = $qty;
-            $detail->unit         = $product->sale_unit;
-            $detail->price        = $price;
-            $detail->discount     = $discount;
-            $detail->subtotal     = $subtotal;
+            $detail->quantity      = $qty;
+            $detail->unit          = $product->sale_unit;
+            $detail->price         = $price;
+            $detail->discount      = $discount;
+            $detail->subtotal      = $subtotal;
             $detail->save();
         }
     }

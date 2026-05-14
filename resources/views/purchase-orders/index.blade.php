@@ -27,25 +27,19 @@
 
                     <thead class="bg-gray-50">
                         <tr>
-
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                                 PO Number
                             </th>
-
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                                 Supplier
                             </th>
-
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                                 Date
                             </th>
-
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                                 Status
                             </th>
-
                             <th class="px-6 py-3"></th>
-
                         </tr>
                     </thead>
 
@@ -53,27 +47,29 @@
 
                         @forelse($purchaseOrders as $po)
                             <tr>
-
                                 <td class="px-6 py-4 whitespace-nowrap">
                                     {{ 'PO-' . str_pad($po->po_id, 3, '0', STR_PAD_LEFT) }}
                                 </td>
-
                                 <td class="px-6 py-4 whitespace-nowrap">
                                     {{ $po->supplier->supplier_name ?? '-' }}
                                 </td>
-
                                 <td class="px-6 py-4 whitespace-nowrap">
                                     {{ $po->po_date }}
                                 </td>
-
                                 <td class="px-6 py-4 whitespace-nowrap">
                                     {{ $po->status }}
                                 </td>
-
                                 <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
 
+                                    {{-- Tombol Send WA --}}
+                                    <a href="{{ route('purchase-orders.send-whatsapp', $po->po_id) }}"
+                                       target="_blank"
+                                       class="inline-flex items-center px-2 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-500">
+                                        📲 Send WA
+                                    </a>
+
                                     <a href="{{ route('purchase-orders.show', $po->po_id) }}"
-                                       class="text-sky-600 hover:text-sky-900">
+                                       class="text-sky-600 hover:text-sky-900 ms-3">
                                         Detail
                                     </a>
 
@@ -86,19 +82,15 @@
                                           method="POST"
                                           class="inline-block ms-3"
                                           onsubmit="return confirm('Delete this purchase order?');">
-
                                         @csrf
                                         @method('DELETE')
-
                                         <button type="submit"
                                                 class="text-red-600 hover:text-red-900">
                                             Delete
                                         </button>
-
                                     </form>
 
                                 </td>
-
                             </tr>
 
                         @empty

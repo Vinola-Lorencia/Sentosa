@@ -97,6 +97,28 @@
                 </div>
             </div>
 
+            <div>
+                <p class="text-xs font-semibold uppercase text-slate-400">Penjualan</p>
+                <div class="mt-3 space-y-1">
+                    <a href="{{ route('sales.index') }}"
+                        class="flex items-center gap-3 px-3 py-2 rounded-2xl text-sm font-medium hover:bg-slate-100
+                        {{ request()->routeIs('sales.*') ? 'bg-slate-100' : '' }}">
+                        Penjualan
+                    </a>
+                </div>
+            </div>
+
+            <div>
+                <p class="text-xs font-semibold uppercase text-slate-400">Keuangan</p>
+                <div class="mt-3 space-y-1">
+                    <a href="{{ route('piutang.index') }}"
+                        class="flex items-center gap-3 px-3 py-2 rounded-2xl text-sm font-medium hover:bg-slate-100
+                        {{ request()->routeIs('piutang.*') ? 'bg-slate-100' : '' }}">
+                        Piutang
+                    </a>
+                </div>
+            </div>
+
             <!-- SETTINGS -->
             <div>
                 <p class="text-xs font-semibold uppercase text-slate-400">Settings</p>
@@ -160,6 +182,8 @@
             <a href="{{ route('customers.index') }}" class="block px-3 py-2 rounded-xl hover:bg-slate-100">Customers</a>
             <a href="{{ route('purchase-orders.index') }}" class="block px-3 py-2 rounded-xl hover:bg-slate-100">Purchase Orders</a>
             <a href="{{ route('purchases.index') }}" class="block px-3 py-2 rounded-xl hover:bg-slate-100">Purchases</a>
+            <a href="{{ route('sales.index') }}" class="block px-3 py-2 rounded-xl hover:bg-slate-100">Sales</a>
+            <a href="{{ route('piutang.index') }}" class="block px-3 py-2 rounded-xl hover:bg-slate-100">Piutang</a>
             <a href="{{ route('roles.index') }}" class="block px-3 py-2 rounded-xl hover:bg-slate-100">Roles</a>
             <a href="{{ route('users.index') }}" class="block px-3 py-2 rounded-xl hover:bg-slate-100">Users</a>
 

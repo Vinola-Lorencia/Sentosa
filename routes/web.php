@@ -7,7 +7,9 @@ use App\Http\Controllers\RoleController;
 use App\Http\Controllers\SupplierController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\PurchaseOrderController;
-use App\Http\Controllers\PurchaseController; 
+use App\Http\Controllers\PurchaseController;
+use App\Http\Controllers\SaleController;
+use App\Http\Controllers\PiutangController;
 
 use Illuminate\Support\Facades\Route;
 
@@ -23,7 +25,15 @@ Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
+
+    // ✅ Custom routes SEBELUM resource
     Route::get('purchase-orders/{id}/items', [PurchaseOrderController::class, 'getItems'])->name('purchase-orders.items');
+    Route::get('purchase-orders/{id}/send-whatsapp', [PurchaseOrderController::class, 'sendWhatsApp'])->name('purchase-orders.send-whatsapp');
+
+    // Piutang — manual routes
+    Route::get('piutang', [PiutangController::class, 'index'])->name('piutang.index');
+    Route::get('piutang/{id}', [PiutangController::class, 'show'])->name('piutang.show');
+    Route::post('piutang/{id}/bayar', [PiutangController::class, 'bayar'])->name('piutang.bayar');
 
     Route::resource('products', ProductController::class)->except(['show']);
     Route::resource('suppliers', SupplierController::class)->except(['show']);
@@ -32,6 +42,7 @@ Route::middleware('auth')->group(function () {
     Route::resource('users', UserController::class)->except(['show']);
     Route::resource('purchase-orders', PurchaseOrderController::class);
     Route::resource('purchases', PurchaseController::class);
+    Route::resource('sales', SaleController::class);
 });
 
 require __DIR__.'/auth.php';

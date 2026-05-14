@@ -1,8 +1,17 @@
 <x-app-layout>
     <x-slot name="header">
-        <h2 class="font-semibold text-xl text-gray-800 leading-tight">
-            Purchase Order Detail
-        </h2>
+        <div class="flex items-center justify-between">
+            <h2 class="font-semibold text-xl text-gray-800 leading-tight">
+                Purchase Order Detail
+            </h2>
+
+            {{-- Tombol Send WA --}}
+            <a href="{{ route('purchase-orders.send-whatsapp', $purchaseOrder->po_id) }}"
+               target="_blank"
+               class="inline-flex items-center px-4 py-2 bg-green-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-green-500">
+                📲 Send WA
+            </a>
+        </div>
     </x-slot>
 
     <div class="py-12">
@@ -15,22 +24,18 @@
                         <strong>PO Number:</strong>
                         {{ 'PO-' . str_pad($purchaseOrder->po_id, 3, '0', STR_PAD_LEFT) }}
                     </p>
-
                     <p>
                         <strong>Supplier:</strong>
                         {{ $purchaseOrder->supplier->supplier_name }}
                     </p>
-
                     <p>
                         <strong>Date:</strong>
                         {{ $purchaseOrder->po_date }}
                     </p>
-
                     <p>
                         <strong>Status:</strong>
                         {{ $purchaseOrder->status }}
                     </p>
-
                     <p>
                         <strong>Notes:</strong>
                         {{ $purchaseOrder->notes }}
@@ -41,98 +46,76 @@
 
                     <thead class="bg-gray-50">
                         <tr>
-
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                                 Product
                             </th>
-
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                                 Purchase Quantity
                             </th>
-
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                                 Purchase Unit
                             </th>
-
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                                 Qty
                             </th>
-
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                                 Unit
                             </th>
-
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                                 Price
                             </th>
-
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                                 Discount
                             </th>
-
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                                 Subtotal
                             </th>
-
                         </tr>
                     </thead>
 
                     <tbody class="bg-white divide-y divide-gray-200">
 
                         @foreach($purchaseOrder->details as $detail)
-
                             <tr>
-
                                 <td class="px-6 py-4 whitespace-nowrap">
                                     {{ $detail->product->product_name }}
                                 </td>
-
                                 <td class="px-6 py-4 whitespace-nowrap">
                                     {{ $detail->purchase_qty }}
                                 </td>
-
                                 <td class="px-6 py-4 whitespace-nowrap">
                                     {{ $detail->purchase_unit }}
-
+                                </td>
                                 <td class="px-6 py-4 whitespace-nowrap">
                                     {{ $detail->quantity }}
                                 </td>
-
                                 <td class="px-6 py-4 whitespace-nowrap">
                                     {{ $detail->unit }}
                                 </td>
-
                                 <td class="px-6 py-4 whitespace-nowrap">
                                     Rp {{ number_format($detail->price, 0, ',', '.') }}
                                 </td>
-
                                 <td class="px-6 py-4 whitespace-nowrap">
                                     {{ $detail->discount }}%
                                 </td>
-
                                 <td class="px-6 py-4 whitespace-nowrap">
                                     Rp {{ number_format($detail->subtotal, 0, ',', '.') }}
                                 </td>
-
                             </tr>
-
                         @endforeach
 
                     </tbody>
-                   
 
                     <tfoot class="bg-gray-50">
                         <tr>
                             <td colspan="7" class="px-6 py-4 text-right font-semibold text-gray-700">
                                 Grand Total
                             </td>
-                            <td class="px-6 py-4 font-bold text-gray-900">
+                            <td class="px-6 py-4 font-bold text-gray-900 whitespace-nowrap">
                                 Rp {{ number_format($purchaseOrder->details->sum('subtotal'), 0, ',', '.') }}
                             </td>
                         </tr>
                     </tfoot>
-
-                </table>
 
                 </table>
 

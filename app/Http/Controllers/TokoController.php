@@ -49,10 +49,9 @@ class TokoController extends Controller
             'quantity'   => 'required|numeric|min:0.25',
         ]);
 
-        $product  = Product::findOrFail($request->product_id);
+        $product   = Product::findOrFail($request->product_id);
         $keranjang = Session::get('keranjang', []);
-
-        $key = 'product_' . $product->id;
+        $key       = 'product_' . $product->id;
 
         if (isset($keranjang[$key])) {
             $keranjang[$key]['quantity'] += $request->quantity;
@@ -151,12 +150,14 @@ class TokoController extends Controller
 
         DB::transaction(function () use ($request, $keranjang) {
 
-            // Hitung total
             $total = collect($keranjang)->sum('subtotal');
+
+            // ✅ Cari customer by nama user yang login
+            $customer = Customer::where('customer_name', Auth::user()->name)->first();
 
             // Simpan sale
             $sale = new Sale();
-            $sale->customer_id    = null;
+            $sale->customer_id    = $customer?->id ?? null;
             $sale->user_id        = Auth::id();
             $sale->sale_date      = now()->toDateString();
             $sale->payment_method = $request->payment_method;
@@ -184,9 +185,7 @@ class TokoController extends Controller
                 $product->save();
             }
 
-            // Kosongkan keranjang
             Session::forget('keranjang');
-
             Session::put('last_order_id', $sale->sale_id);
         });
 

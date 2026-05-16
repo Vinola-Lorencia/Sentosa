@@ -7,18 +7,50 @@ use Illuminate\Http\Request;
 
 class ProductController extends Controller
 {
-    public function index()
+    /**
+     * Display a listing of the resource.
+     */
+    public function index(Request $request)
     {
-        $products = Product::latest()->paginate(10);
+        $query = Product::query();
+
+        // Search product name
+        if ($request->filled('search')) {
+            $query->where('product_name', 'like', '%' . $request->search . '%');
+        }
+
+        // Filter brand
+        if ($request->filled('brand')) {
+            $query->where('brand', 'like', '%' . $request->brand . '%');
+        }
+
+        // Filter stock
+        if ($request->stock == 'available') {
+            $query->where('stock', '>', 0);
+        }
+
+        if ($request->stock == 'empty') {
+            $query->where('stock', '<=', 0);
+        }
+
+        $products = $query->latest()
+            ->paginate(10)
+            ->withQueryString();
 
         return view('products.index', compact('products'));
     }
 
+    /**
+     * Show the form for creating a new resource.
+     */
     public function create()
     {
         return view('products.create');
     }
 
+    /**
+     * Store a newly created resource in storage.
+     */
     public function store(Request $request)
     {
         $data = $request->validate([
@@ -35,14 +67,22 @@ class ProductController extends Controller
 
         Product::create($data);
 
-        return redirect()->route('products.index')->with('success', 'Product created successfully.');
+        return redirect()
+            ->route('products.index')
+            ->with('success', 'Product created successfully.');
     }
 
+    /**
+     * Show the form for editing the specified resource.
+     */
     public function edit(Product $product)
     {
         return view('products.edit', compact('product'));
     }
 
+    /**
+     * Update the specified resource in storage.
+     */
     public function update(Request $request, Product $product)
     {
         $data = $request->validate([
@@ -59,13 +99,20 @@ class ProductController extends Controller
 
         $product->update($data);
 
-        return redirect()->route('products.index')->with('success', 'Product updated successfully.');
+        return redirect()
+            ->route('products.index')
+            ->with('success', 'Product updated successfully.');
     }
 
+    /**
+     * Remove the specified resource from storage.
+     */
     public function destroy(Product $product)
     {
         $product->delete();
 
-        return redirect()->route('products.index')->with('success', 'Product deleted successfully.');
+        return redirect()
+            ->route('products.index')
+            ->with('success', 'Product deleted successfully.');
     }
 }

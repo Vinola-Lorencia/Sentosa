@@ -28,6 +28,13 @@ class AuthenticatedSessionController extends Controller
 
         $request->session()->regenerate();
 
+        // ✅ Cek role dulu sebelum redirect
+        $user = auth()->user();
+
+        if ($user->role?->role_name === 'Pembeli') {
+            return redirect()->intended(route('toko.index'));
+        }
+
         return redirect()->intended(route('dashboard', absolute: false));
     }
 

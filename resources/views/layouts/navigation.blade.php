@@ -125,6 +125,27 @@
                 </div>
             </div>
 
+            <div>
+                <p class="text-xs font-semibold uppercase text-slate-400">Laporan</p>
+                <div class="mt-3 space-y-1">
+                    <a href="{{ route('laporan.penjualan') }}"
+                        class="flex items-center gap-3 px-3 py-2 rounded-2xl text-sm font-medium hover:bg-slate-100
+                        {{ request()->routeIs('laporan.penjualan*') ? 'bg-slate-100' : '' }}">
+                        Lap. Penjualan
+                    </a>
+                    <a href="{{ route('laporan.pembelian') }}"
+                        class="flex items-center gap-3 px-3 py-2 rounded-2xl text-sm font-medium hover:bg-slate-100
+                        {{ request()->routeIs('laporan.pembelian*') ? 'bg-slate-100' : '' }}">
+                        Lap. Pembelian
+                    </a>
+                    <a href="{{ route('laporan.piutang') }}"
+                        class="flex items-center gap-3 px-3 py-2 rounded-2xl text-sm font-medium hover:bg-slate-100
+                        {{ request()->routeIs('laporan.piutang*') ? 'bg-slate-100' : '' }}">
+                        Lap. Piutang
+                    </a>
+                </div>
+            </div>
+
             
 
             <!-- SETTINGS -->

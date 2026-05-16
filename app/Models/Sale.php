@@ -36,4 +36,9 @@ class Sale extends Model
     {
         return $this->hasOne(Receivable::class, 'sale_id', 'sale_id');
     }
+
+    public function deliveries()
+    {
+        return $this->hasMany(Delivery::class, 'sale_id', 'sale_id');
+    }
 }

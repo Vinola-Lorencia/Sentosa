@@ -116,8 +116,16 @@
                         {{ request()->routeIs('piutang.*') ? 'bg-slate-100' : '' }}">
                         Piutang
                     </a>
+
+                    <a href="{{ route('pengiriman.index') }}"
+                        class="flex items-center gap-3 px-3 py-2 rounded-2xl text-sm font-medium hover:bg-slate-100
+                        {{ request()->routeIs('pengiriman.*') ? 'bg-slate-100' : '' }}">
+                        Pengiriman
+                    </a>
                 </div>
             </div>
+
+            
 
             <!-- SETTINGS -->
             <div>

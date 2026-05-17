@@ -12,7 +12,18 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('products', function (Blueprint $table) {
-            //
+
+            $table->string('brand')
+                  ->nullable()
+                  ->after('product_name');
+
+            $table->decimal('default_buy_price', 10, 2)
+                  ->default(0)
+                  ->after('brand');
+
+            $table->decimal('default_buy_discount', 10, 2)
+                  ->default(0)
+                  ->after('default_buy_price');
         });
     }
 
@@ -22,7 +33,12 @@ return new class extends Migration
     public function down(): void
     {
         Schema::table('products', function (Blueprint $table) {
-            //
+
+            $table->dropColumn([
+                'brand',
+                'default_buy_price',
+                'default_buy_discount'
+            ]);
         });
     }
 };

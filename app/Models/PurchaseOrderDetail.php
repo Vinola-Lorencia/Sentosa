@@ -15,6 +15,7 @@ class PurchaseOrderDetail extends Model
     protected $fillable = [
         'po_id',
         'product_id',
+        'purchase_qty',
         'quantity',
         'unit',
         'price',

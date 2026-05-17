@@ -104,10 +104,20 @@
                         class="flex items-center gap-3 px-3 py-2 rounded-2xl text-sm font-medium hover:bg-slate-100
                         {{ request()->routeIs('sales.*') ? 'bg-slate-100' : '' }}">
                         Penjualan
+                        @php $pesananBaru = \App\Models\Sale::where('is_new', true)->count(); @endphp
+                        @if($pesananBaru > 0)
+                            <span class="ml-auto bg-red-500 text-white text-xs font-bold rounded-full px-2 py-0.5">
+                                {{ $pesananBaru }}
+                            </span>
+                        @endif
+                    </a>
+                    <a href="{{ route('pengiriman.index') }}"
+                        class="flex items-center gap-3 px-3 py-2 rounded-2xl text-sm font-medium hover:bg-slate-100
+                        {{ request()->routeIs('pengiriman.*') ? 'bg-slate-100' : '' }}">
+                        Pengiriman
                     </a>
                 </div>
             </div>
-
             <div>
                 <p class="text-xs font-semibold uppercase text-slate-400">Keuangan</p>
                 <div class="mt-3 space-y-1">

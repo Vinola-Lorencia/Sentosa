@@ -8,7 +8,7 @@ class PurchaseOrder extends Model
 {
     protected $primaryKey = 'po_id';
 
-    public $timestamps = false; 
+    
 
     protected $fillable = [
         'supplier_id',

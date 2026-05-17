@@ -78,8 +78,15 @@
                 <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
 
                     {{-- Placeholder foto --}}
-                    <div class="h-36 bg-gray-100 flex items-center justify-center">
-                        <span class="text-4xl">📦</span>
+                                        {{-- Gambar produk --}}
+                    <div class="h-36 bg-gray-100 flex items-center justify-center overflow-hidden">
+                        @if($product->image)
+                            <img src="{{ Storage::url($product->image) }}"
+                                alt="{{ $product->product_name }}"
+                                class="h-full w-full object-cover">
+                        @else
+                            <span class="text-4xl">📦</span>
+                        @endif
                     </div>
 
                     <div class="p-4">

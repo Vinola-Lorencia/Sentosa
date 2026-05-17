@@ -40,7 +40,7 @@
 
                 <div>
                     <p class="text-sm font-semibold text-slate-900">Toko Sentosa</p>
-                    <p class="text-xs text-slate-500">Inventory</p>
+                    <p class="text-xs text-slate-500">Sistem Inventaris</p>
                 </div>
             </a>
         </div>
@@ -56,7 +56,7 @@
                     <a href="{{ route('products.index') }}"
                         class="flex items-center gap-3 px-3 py-2 rounded-2xl text-sm font-medium hover:bg-slate-100
                         {{ request()->routeIs('products.*') ? 'bg-slate-100' : '' }}">
-                        Products
+                        Produk
                     </a>
                 </div>
             </div>
@@ -75,7 +75,7 @@
                     <a href="{{ route('customers.index') }}"
                         class="flex items-center gap-3 px-3 py-2 rounded-2xl text-sm font-medium hover:bg-slate-100
                         {{ request()->routeIs('customers.*') ? 'bg-slate-100' : '' }}">
-                        Customers
+                        Pelanggan
                     </a>
                 </div>
             </div>
@@ -92,7 +92,7 @@
                     <a href="{{ route('purchases.index') }}"
                         class="flex items-center gap-3 px-3 py-2 rounded-2xl text-sm font-medium hover:bg-slate-100
                         {{ request()->routeIs('purchases.*') ? 'bg-slate-100' : '' }}">
-                        Purchases
+                        Pembelian
                     </a>
                 </div>
             </div>
@@ -162,7 +162,7 @@
                     <a href="{{ route('roles.index') }}"
                         class="flex items-center gap-3 px-3 py-2 rounded-2xl text-sm font-medium hover:bg-slate-100
                         {{ request()->routeIs('roles.*') ? 'bg-slate-100' : '' }}">
-                        Roles
+                        Role
                     </a>
                 </div>
             </div>
@@ -190,7 +190,7 @@
                 <form method="POST" action="{{ route('logout') }}">
                     @csrf
                     <button class="w-full text-left px-3 py-2 rounded-xl text-sm text-red-600 hover:bg-red-50">
-                        Logout
+                        Keluar
                     </button>
                 </form>
 

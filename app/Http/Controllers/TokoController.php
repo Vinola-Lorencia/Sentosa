@@ -163,6 +163,7 @@ class TokoController extends Controller
             $sale->payment_method = $request->payment_method;
             $sale->payment_status = 'Belum Bayar';
             $sale->total_amount   = $total;
+            $sale->is_new         = true;
             $sale->notes          = "Pembeli: {$request->nama}" .
                                     ($request->alamat ? " | Alamat: {$request->alamat}" : '') .
                                     ($request->catatan ? " | Catatan: {$request->catatan}" : '');

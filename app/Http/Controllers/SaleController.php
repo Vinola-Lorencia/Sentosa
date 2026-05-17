@@ -276,4 +276,14 @@ class SaleController extends Controller
             ->route('sales.index')
             ->with('success', 'Transaksi penjualan berhasil dihapus.');
     }
+    public function tandaiDiproses(string $id)
+    {
+        $sale = Sale::findOrFail($id);
+        $sale->is_new = false;
+        $sale->save();
+
+        return redirect()
+            ->route('dashboard')
+            ->with('success', 'Pesanan INV-' . str_pad($sale->sale_id, 3, '0', STR_PAD_LEFT) . ' ditandai sudah diproses.');
+    }
 }

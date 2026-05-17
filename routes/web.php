@@ -73,6 +73,7 @@ Route::middleware('auth')->group(function () {
     Route::resource('users', UserController::class)->except(['show']);
     Route::resource('purchase-orders', PurchaseOrderController::class);
     Route::resource('purchases', PurchaseController::class);
+    Route::patch('sales/{id}/tandai-diproses', [SaleController::class, 'tandaiDiproses'])->name('sales.tandai-diproses');
     Route::resource('sales', SaleController::class);
     Route::resource('pengiriman', PengirimanController::class);
 });

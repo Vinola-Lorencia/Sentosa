@@ -13,7 +13,10 @@ class Sale extends Model
         'user_id',
         'sale_date',
         'payment_method',
+        'payment_status',
+        'paid_date',
         'total_amount',
+        'is_new',
         'notes',
     ];
 

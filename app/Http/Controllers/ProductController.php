@@ -4,27 +4,22 @@ namespace App\Http\Controllers;
 
 use App\Models\Product;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 
 class ProductController extends Controller
 {
-    /**
-     * Display a listing of the resource.
-     */
     public function index(Request $request)
     {
         $query = Product::query();
 
-        // Search product name
         if ($request->filled('search')) {
             $query->where('product_name', 'like', '%' . $request->search . '%');
         }
 
-        // Filter brand
         if ($request->filled('brand')) {
             $query->where('brand', 'like', '%' . $request->brand . '%');
         }
 
-        // Filter stock
         if ($request->stock == 'available') {
             $query->where('stock', '>', 0);
         }
@@ -40,30 +35,30 @@ class ProductController extends Controller
         return view('products.index', compact('products'));
     }
 
-    /**
-     * Show the form for creating a new resource.
-     */
     public function create()
     {
         return view('products.create');
     }
 
-    /**
-     * Store a newly created resource in storage.
-     */
     public function store(Request $request)
     {
         $data = $request->validate([
-            'product_name' => ['required', 'string', 'max:255'],
-            'sale_price' => ['required', 'numeric', 'min:0'],
-            'brand' => ['nullable', 'string', 'max:255'],
-            'default_buy_price' => ['required', 'numeric', 'min:0'],
+            'product_name'         => ['required', 'string', 'max:255'],
+            'sale_price'           => ['required', 'numeric', 'min:0'],
+            'brand'                => ['nullable', 'string', 'max:255'],
+            'image'                => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
+            'default_buy_price'    => ['required', 'numeric', 'min:0'],
             'default_buy_discount' => ['required', 'numeric', 'min:0'],
-            'sale_unit' => ['required', 'string', 'max:50'],
-            'purchase_unit' => ['required', 'string', 'max:50'],
-            'dus_to_unit' => ['required', 'integer', 'min:1'],
-            'stock' => ['required', 'integer', 'min:0'],
+            'sale_unit'            => ['required', 'string', 'max:50'],
+            'purchase_unit'        => ['required', 'string', 'max:50'],
+            'dus_to_unit'          => ['required', 'integer', 'min:1'],
+            'stock'                => ['required', 'integer', 'min:0'],
         ]);
+
+        // Upload gambar
+        if ($request->hasFile('image')) {
+            $data['image'] = $request->file('image')->store('products', 'public');
+        }
 
         Product::create($data);
 
@@ -72,30 +67,41 @@ class ProductController extends Controller
             ->with('success', 'Product created successfully.');
     }
 
-    /**
-     * Show the form for editing the specified resource.
-     */
     public function edit(Product $product)
     {
         return view('products.edit', compact('product'));
     }
 
-    /**
-     * Update the specified resource in storage.
-     */
     public function update(Request $request, Product $product)
     {
         $data = $request->validate([
-            'product_name' => ['required', 'string', 'max:255'],
-            'sale_price' => ['required', 'numeric', 'min:0'],
-            'brand' => ['nullable', 'string', 'max:255'],
-            'default_buy_price' => ['required', 'numeric', 'min:0'],
+            'product_name'         => ['required', 'string', 'max:255'],
+            'sale_price'           => ['required', 'numeric', 'min:0'],
+            'brand'                => ['nullable', 'string', 'max:255'],
+            'image'                => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
+            'default_buy_price'    => ['required', 'numeric', 'min:0'],
             'default_buy_discount' => ['required', 'numeric', 'min:0'],
-            'sale_unit' => ['required', 'string', 'max:50'],
-            'purchase_unit' => ['required', 'string', 'max:50'],
-            'dus_to_unit' => ['required', 'integer', 'min:1'],
-            'stock' => ['required', 'integer', 'min:0'],
+            'sale_unit'            => ['required', 'string', 'max:50'],
+            'purchase_unit'        => ['required', 'string', 'max:50'],
+            'dus_to_unit'          => ['required', 'integer', 'min:1'],
+            'stock'                => ['required', 'integer', 'min:0'],
         ]);
+
+        // Upload gambar baru — hapus yang lama
+        if ($request->hasFile('image')) {
+            if ($product->image) {
+                Storage::disk('public')->delete($product->image);
+            }
+            $data['image'] = $request->file('image')->store('products', 'public');
+        }
+
+        // Hapus gambar kalau dicentang
+        if ($request->boolean('remove_image')) {
+            if ($product->image) {
+                Storage::disk('public')->delete($product->image);
+            }
+            $data['image'] = null;
+        }
 
         $product->update($data);
 
@@ -104,11 +110,13 @@ class ProductController extends Controller
             ->with('success', 'Product updated successfully.');
     }
 
-    /**
-     * Remove the specified resource from storage.
-     */
     public function destroy(Product $product)
     {
+        // Hapus gambar saat produk dihapus
+        if ($product->image) {
+            Storage::disk('public')->delete($product->image);
+        }
+
         $product->delete();
 
         return redirect()

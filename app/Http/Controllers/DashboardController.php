@@ -8,7 +8,6 @@ use App\Models\Receivable;
 use App\Models\Sale;
 
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 
 class DashboardController extends Controller
@@ -17,27 +16,21 @@ class DashboardController extends Controller
     {
         $now = Carbon::now();
 
-        // ─── Summary Cards ────────────────────────────────────────────────
-
-        // Total penjualan bulan ini
+        // Summary Cards
         $totalPenjualanBulanIni = Sale::whereMonth('sale_date', $now->month)
             ->whereYear('sale_date', $now->year)
             ->sum('total_amount');
 
-        // Total pembelian bulan ini
         $totalPembelianBulanIni = Purchase::whereMonth('purchase_date', $now->month)
             ->whereYear('purchase_date', $now->year)
             ->sum('total_amount');
 
-        // Total piutang outstanding
         $totalPiutang = Receivable::where('status', 'Unpaid')
             ->sum('remaining_amount');
 
-        // Jumlah produk stok menipis (stok < 10)
         $stokMenipis = Product::where('stock', '<', 10)->count();
 
-        // ─── Grafik Penjualan 6 Bulan ────────────────────────────────────
-
+        // Grafik 6 bulan
         $grafikPenjualan = [];
         for ($i = 5; $i >= 0; $i--) {
             $bulan = Carbon::now()->subMonths($i);
@@ -51,8 +44,7 @@ class DashboardController extends Controller
             ];
         }
 
-        // ─── Piutang Jatuh Tempo ─────────────────────────────────────────
-
+        // Piutang jatuh tempo
         $piutangJatuhTempo = Receivable::with('customer', 'sale')
             ->where('status', 'Unpaid')
             ->whereNotNull('due_date')
@@ -60,18 +52,22 @@ class DashboardController extends Controller
             ->take(5)
             ->get();
 
-        // ─── Transaksi Terakhir ───────────────────────────────────────────
-
+        // Transaksi terakhir
         $transaksiTerakhir = Sale::with('customer')
             ->latest('sale_id')
             ->take(5)
             ->get();
 
-        // ─── Produk Stok Menipis ─────────────────────────────────────────
-
+        // Stok menipis
         $produkStokMenipis = Product::where('stock', '<', 10)
             ->orderBy('stock', 'asc')
             ->take(8)
+            ->get();
+
+        // ✅ Pesanan baru dari pembeli
+        $pesananBaru = Sale::where('is_new', true)
+            ->with('customer')
+            ->latest('sale_id')
             ->get();
 
         return view('dashboard', compact(
@@ -83,6 +79,7 @@ class DashboardController extends Controller
             'piutangJatuhTempo',
             'transaksiTerakhir',
             'produkStokMenipis',
+            'pesananBaru',
         ));
     }
 }

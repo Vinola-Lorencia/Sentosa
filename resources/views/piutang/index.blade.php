@@ -92,7 +92,7 @@
                                 <td class="px-6 py-4 text-sm">
                                     <div class="flex items-center gap-3">
                                         <a href="{{ route('piutang.show', $item->receivable_id) }}"
-                                           class="text-indigo-600 hover:text-indigo-800">Detail</a>
+                                        class="text-indigo-600 hover:text-indigo-800">Detail</a>
 
                                         @if($item->status === 'Unpaid')
                                             <button
@@ -101,6 +101,16 @@
                                                 Tandai Lunas
                                             </button>
                                         @endif
+
+                                        <form action="{{ route('piutang.destroy', $item->receivable_id) }}"
+                                            method="POST"
+                                            onsubmit="return confirm('Hapus data piutang ini?')">
+                                            @csrf
+                                            @method('DELETE')
+                                            <button type="submit" class="text-red-600 hover:text-red-800">
+                                                Hapus
+                                            </button>
+                                        </form>
                                     </div>
                                 </td>
                             </tr>
@@ -147,6 +157,7 @@
                         Konfirmasi Lunas
                     </button>
                 </div>
+
             </form>
         </div>
     </div>

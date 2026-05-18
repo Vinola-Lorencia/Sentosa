@@ -38,6 +38,7 @@ Route::middleware('auth')->group(function () {
     Route::get('piutang', [PiutangController::class, 'index'])->name('piutang.index');
     Route::get('piutang/{id}', [PiutangController::class, 'show'])->name('piutang.show');
     Route::post('piutang/{id}/bayar', [PiutangController::class, 'bayar'])->name('piutang.bayar');
+      Route::delete('piutang/{id}', [PiutangController::class, 'destroy'])->name('piutang.destroy');
 
     // Laporan
     Route::prefix('laporan')->name('laporan.')->group(function () {
@@ -50,6 +51,7 @@ Route::middleware('auth')->group(function () {
         Route::get('pembelian/export-pdf', [LaporanController::class, 'exportPembelianPdf'])->name('pembelian.pdf');
 
         Route::get('piutang', [LaporanController::class, 'piutang'])->name('piutang');
+      
         Route::get('piutang/export-excel', [LaporanController::class, 'exportPiutangExcel'])->name('piutang.excel');
         Route::get('piutang/export-pdf', [LaporanController::class, 'exportPiutangPdf'])->name('piutang.pdf');
     });

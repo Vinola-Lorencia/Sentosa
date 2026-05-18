@@ -13,7 +13,7 @@ return new class extends Migration
     {
         Schema::create('receivables', function (Blueprint $table) {
             $table->id('receivable_id');
-            $table->foreignId('sale_id')->constrained('sales', 'sale_id')->onDelete('cascade');
+            $table->foreignId('sale_id')->constrained('sales')->onDelete('cascade');
             $table->foreignId('customer_id')->constrained('customers');
             $table->date('due_date');
             $table->decimal('amount', 12, 2);

@@ -73,4 +73,14 @@ class PiutangController extends Controller
             ->route('piutang.show', $piutang->receivable_id)
             ->with('success', 'Pembayaran berhasil dicatat.');
     }
+
+    public function destroy(string $id)
+    {
+        $piutang = Receivable::findOrFail($id);
+        $piutang->delete();
+
+        return redirect()
+            ->route('piutang.index')
+            ->with('success', 'Data piutang berhasil dihapus.');
+    }
 }

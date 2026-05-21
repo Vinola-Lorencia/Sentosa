@@ -11,6 +11,7 @@
         .header h1 { font-size: 16px; font-weight: bold; }
         .header h2 { font-size: 13px; font-weight: bold; margin-top: 4px; }
         .header p { font-size: 10px; color: #666; margin-top: 2px; }
+        .section-title { font-size: 12px; font-weight: bold; margin-bottom: 8px; margin-top: 15px; border-left: 3px solid #4f46e5; padding-left: 8px; }
         .summary { margin-bottom: 15px; }
         .summary table { width: 100%; border-collapse: collapse; }
         .summary td { padding: 5px 8px; border: 1px solid #e5e7eb; font-size: 10px; text-align: center; }
@@ -24,13 +25,19 @@
         .badge { padding: 2px 6px; border-radius: 10px; font-size: 9px; font-weight: bold; }
         .badge-green { background: #d1fae5; color: #065f46; }
         .badge-red { background: #fee2e2; color: #991b1b; }
+        .progress-bar-bg { background: #e5e7eb; border-radius: 4px; height: 6px; width: 100%; margin-top: 3px; }
+        .progress-bar { background: #4f46e5; border-radius: 4px; height: 6px; }
+        .progress-bar-gray { background: #9ca3af; border-radius: 4px; height: 6px; }
         .text-right { text-align: right; }
         .text-center { text-align: center; }
+        .text-muted { color: #6b7280; font-style: italic; }
         .footer { margin-top: 20px; text-align: right; font-size: 9px; color: #999; }
+        .page-break { page-break-after: always; }
     </style>
 </head>
 <body>
 
+    {{-- Header --}}
     <div class="header">
         <h1>TOKO SENTOSA</h1>
         <p>Jl. Bengkalis II No.91/93, Gang Buntu, Medan Timur, Medan 20231 | 082364740128</p>
@@ -38,6 +45,7 @@
         <p>Periode: {{ \Carbon\Carbon::parse($startDate)->format('d F Y') }} s/d {{ \Carbon\Carbon::parse($endDate)->format('d F Y') }}</p>
     </div>
 
+    {{-- Summary --}}
     <div class="summary">
         <table>
             <tr>
@@ -55,6 +63,68 @@
         </table>
     </div>
 
+    {{-- Penjualan per Customer --}}
+    <div class="section-title">Penjualan per Customer</div>
+    <table class="data">
+        <thead>
+            <tr>
+                <th>Customer</th>
+                <th class="text-center">Jumlah Transaksi</th>
+                <th class="text-right">Total Penjualan</th>
+                <th class="text-right">%</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach($omsetPerCustomer as $customer)
+                @if($customer->total_penjualan > 0)
+                    <tr>
+                        <td>{{ $customer->customer_name }}</td>
+                        <td class="text-center">{{ $customer->jumlah_transaksi }} transaksi</td>
+                        <td class="text-right">Rp {{ number_format($customer->total_penjualan, 0, ',', '.') }}</td>
+                        <td class="text-right">
+                            @php $pct = $total > 0 ? ($customer->total_penjualan / $total) * 100 : 0; @endphp
+                            {{ number_format($pct, 1) }}%
+                            <div class="progress-bar-bg">
+                                <div class="progress-bar" style="width: {{ $pct }}%;"></div>
+                            </div>
+                        </td>
+                    </tr>
+                @endif
+            @endforeach
+
+            {{-- Walk-in --}}
+            @if($walkInTotal > 0)
+                <tr>
+                    <td class="text-muted">Walk-in Customer</td>
+                    <td class="text-center">{{ $walkInCount }} transaksi</td>
+                    <td class="text-right">Rp {{ number_format($walkInTotal, 0, ',', '.') }}</td>
+                    <td class="text-right">
+                        @php $pctWalkin = $total > 0 ? ($walkInTotal / $total) * 100 : 0; @endphp
+                        {{ number_format($pctWalkin, 1) }}%
+                        <div class="progress-bar-bg">
+                            <div class="progress-bar-gray" style="width: {{ $pctWalkin }}%;"></div>
+                        </div>
+                    </td>
+                </tr>
+            @endif
+
+            @if($omsetPerCustomer->where('total_penjualan', '>', 0)->isEmpty() && $walkInTotal == 0)
+                <tr>
+                    <td colspan="4" class="text-center">Tidak ada data penjualan pada periode ini.</td>
+                </tr>
+            @endif
+        </tbody>
+        <tfoot>
+            <tr class="tfoot-row">
+                <td colspan="2" class="text-right">Grand Total</td>
+                <td class="text-right">Rp {{ number_format($total, 0, ',', '.') }}</td>
+                <td class="text-right">100%</td>
+            </tr>
+        </tfoot>
+    </table>
+
+    {{-- Detail Transaksi --}}
+    <div class="section-title">Detail Transaksi Penjualan</div>
     <table class="data">
         <thead>
             <tr>

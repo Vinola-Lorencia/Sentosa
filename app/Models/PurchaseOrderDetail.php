@@ -16,11 +16,12 @@ class PurchaseOrderDetail extends Model
         'po_id',
         'product_id',
         'purchase_qty',
+        'purchase_unit',
         'quantity',
         'unit',
         'price',
         'discount',
-        'subtotal'
+        'subtotal',
     ];
 
     public function purchaseOrder()

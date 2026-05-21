@@ -12,36 +12,28 @@
             <div class="bg-white shadow-sm sm:rounded-lg p-6">
                 <form method="GET" action="{{ route('laporan.pembelian') }}"
                       class="flex items-end gap-4 flex-wrap">
-
                     <div>
                         <x-input-label for="start_date" :value="__('Dari Tanggal')" />
                         <x-text-input id="start_date" name="start_date" type="date"
-                            class="mt-1 block"
-                            value="{{ $startDate }}" />
+                            class="mt-1 block" value="{{ $startDate }}" />
                     </div>
-
                     <div>
                         <x-input-label for="end_date" :value="__('Sampai Tanggal')" />
                         <x-text-input id="end_date" name="end_date" type="date"
-                            class="mt-1 block"
-                            value="{{ $endDate }}" />
+                            class="mt-1 block" value="{{ $endDate }}" />
                     </div>
-
                     <button type="submit"
                         class="inline-flex items-center px-4 py-2 bg-indigo-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-indigo-500">
                         Filter
                     </button>
-
                     <a href="{{ route('laporan.pembelian.excel', ['start_date' => $startDate, 'end_date' => $endDate]) }}"
                        class="inline-flex items-center px-4 py-2 bg-green-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-green-500">
                         Export Excel
                     </a>
-
                     <a href="{{ route('laporan.pembelian.pdf', ['start_date' => $startDate, 'end_date' => $endDate]) }}"
                        class="inline-flex items-center px-4 py-2 bg-red-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-red-500">
                         Export PDF
                     </a>
-
                 </form>
             </div>
 
@@ -59,8 +51,80 @@
                 </div>
             </div>
 
-            {{-- Tabel --}}
+            {{-- Omset Per Supplier --}}
             <div class="bg-white shadow-sm sm:rounded-lg overflow-hidden">
+                <div class="px-6 py-4 border-b border-gray-200">
+                    <h3 class="text-sm font-semibold text-gray-800">Omset per Supplier</h3>
+                    <p class="text-xs text-gray-500 mt-1">
+                        Periode: {{ \Carbon\Carbon::parse($startDate)->format('d M Y') }} s/d
+                        {{ \Carbon\Carbon::parse($endDate)->format('d M Y') }}
+                    </p>
+                </div>
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Supplier</th>
+                            <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Jumlah Transaksi</th>
+                            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Total Pembelian</th>
+                            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">%</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200">
+                        @forelse($omsetPerSupplier as $supplier)
+                            @if($supplier->total_pembelian > 0)
+                                <tr>
+                                    <td class="px-6 py-4 text-sm font-medium text-gray-900">
+                                        {{ $supplier->supplier_name }}
+                                    </td>
+                                    <td class="px-6 py-4 text-sm text-gray-900 text-center">
+                                        {{ $supplier->jumlah_transaksi }} transaksi
+                                    </td>
+                                    <td class="px-6 py-4 text-sm font-semibold text-gray-900 text-right whitespace-nowrap">
+                                        Rp {{ number_format($supplier->total_pembelian, 0, ',', '.') }}
+                                    </td>
+                                    <td class="px-6 py-4 text-sm text-gray-500 text-right">
+                                        @if($total > 0)
+                                            {{ number_format(($supplier->total_pembelian / $total) * 100, 1) }}%
+                                            <div class="w-full bg-gray-200 rounded-full h-1.5 mt-1">
+                                                <div class="bg-indigo-500 h-1.5 rounded-full"
+                                                     style="width: {{ ($supplier->total_pembelian / $total) * 100 }}%">
+                                                </div>
+                                            </div>
+                                        @else
+                                            0%
+                                        @endif
+                                    </td>
+                                </tr>
+                            @endif
+                        @empty
+                            <tr>
+                                <td colspan="4" class="px-6 py-4 text-center text-sm text-gray-500">
+                                    Tidak ada data.
+                                </td>
+                            </tr>
+                        @endforelse
+                    </tbody>
+                    <tfoot class="bg-gray-50">
+                        <tr>
+                            <td colspan="2" class="px-6 py-4 text-right text-sm font-bold text-gray-700">
+                                Grand Total
+                            </td>
+                            <td class="px-6 py-4 text-right text-sm font-bold text-indigo-600 whitespace-nowrap">
+                                Rp {{ number_format($total, 0, ',', '.') }}
+                            </td>
+                            <td class="px-6 py-4 text-right text-sm font-bold text-gray-700">
+                                100%
+                            </td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+
+            {{-- Tabel Detail Pembelian --}}
+            <div class="bg-white shadow-sm sm:rounded-lg overflow-hidden">
+                <div class="px-6 py-4 border-b border-gray-200">
+                    <h3 class="text-sm font-semibold text-gray-800">Detail Transaksi Pembelian</h3>
+                </div>
                 <table class="min-w-full divide-y divide-gray-200">
                     <thead class="bg-gray-50">
                         <tr>

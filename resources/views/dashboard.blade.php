@@ -8,7 +8,7 @@
     <div class="py-8">
         <div class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
 
-            {{-- ✅ Notifikasi Pesanan Baru --}}
+            {{-- Notifikasi Pesanan Baru --}}
             @if($pesananBaru->count() > 0)
                 <div class="bg-yellow-50 border border-yellow-300 rounded-lg p-4">
                     <div class="flex items-center justify-between mb-3">
@@ -23,7 +23,6 @@
                             Lihat semua →
                         </a>
                     </div>
-
                     <div class="space-y-2">
                         @foreach($pesananBaru as $order)
                             <div class="flex items-center justify-between bg-white rounded-md px-3 py-2 border border-yellow-200">
@@ -108,18 +107,23 @@
 
             {{-- Grafik + Piutang Jatuh Tempo --}}
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+                {{-- Grafik --}}
                 <div class="lg:col-span-2 bg-white rounded-lg shadow-sm p-6">
                     <h3 class="text-sm font-semibold text-gray-800 mb-4">Penjualan 6 Bulan Terakhir</h3>
-                    <div class="flex items-end gap-2 h-40">
-                        @php $maxTotal = collect($grafikPenjualan)->max('total') ?: 1; @endphp
+
+                    @php $maxTotal = collect($grafikPenjualan)->max('total') ?: 1; @endphp
+
+                    <div class="flex items-end gap-3" style="height: 160px;">
                         @foreach($grafikPenjualan as $data)
-                            @php $height = ($data['total'] / $maxTotal) * 100; @endphp
-                            <div class="flex-1 flex flex-col items-center gap-1">
+                            @php $heightPx = max(($data['total'] / $maxTotal) * 130, 2); @endphp
+                            <div class="flex-1 flex flex-col items-center gap-1 justify-end h-full">
                                 <p class="text-xs text-gray-500 whitespace-nowrap">
-                                    {{ number_format($data['total'] / 1000, 0) }}k
+                                    {{ $data['total'] > 0 ? number_format($data['total'] / 1000, 0) . 'k' : '0' }}
                                 </p>
                                 <div class="w-full bg-indigo-500 rounded-t"
-                                     style="height: {{ max($height, 2) }}%"></div>
+                                     style="height: {{ $heightPx }}px; min-height: 2px;">
+                                </div>
                                 <p class="text-xs text-gray-500 whitespace-nowrap">
                                     {{ $data['bulan'] }}
                                 </p>
@@ -128,6 +132,7 @@
                     </div>
                 </div>
 
+                {{-- Piutang Jatuh Tempo --}}
                 <div class="bg-white rounded-lg shadow-sm p-6">
                     <h3 class="text-sm font-semibold text-gray-800 mb-4">Piutang Jatuh Tempo</h3>
                     @forelse($piutangJatuhTempo as $item)
@@ -154,10 +159,13 @@
                         Lihat semua piutang →
                     </a>
                 </div>
+
             </div>
 
             {{-- Transaksi Terakhir + Stok Menipis --}}
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+                {{-- Transaksi Terakhir --}}
                 <div class="bg-white rounded-lg shadow-sm p-6">
                     <h3 class="text-sm font-semibold text-gray-800 mb-4">Transaksi Penjualan Terakhir</h3>
                     <table class="min-w-full">
@@ -203,6 +211,7 @@
                     </a>
                 </div>
 
+                {{-- Stok Menipis --}}
                 <div class="bg-white rounded-lg shadow-sm p-6">
                     <h3 class="text-sm font-semibold text-gray-800 mb-4">Produk Stok Menipis</h3>
                     <table class="min-w-full">
@@ -243,6 +252,7 @@
                         Lihat semua produk →
                     </a>
                 </div>
+
             </div>
 
         </div>

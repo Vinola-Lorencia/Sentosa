@@ -13,7 +13,8 @@ return new class extends Migration
     {
         Schema::create('purchase_details', function (Blueprint $table) {
             $table->id('purchase_detail_id');
-            $table->foreignId('purchase_id')->constrained('purchases')->onDelete('cascade');
+            $table->unsignedBigInteger('purchase_id');
+            $table->foreign('purchase_id')->references('purchase_id')->on('purchases')->onDelete('cascade');
             $table->foreignId('product_id')->constrained('products');
             $table->integer('quantity');
             $table->string('unit');

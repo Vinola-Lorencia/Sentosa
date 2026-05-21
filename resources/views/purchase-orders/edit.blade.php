@@ -2,12 +2,12 @@
     <x-slot name="header">
         <div class="flex items-center justify-between">
             <h2 class="font-semibold text-xl text-gray-800 leading-tight">
-                Edit Purchase Order
+                Ubah Purchase Order
             </h2>
 
             <a href="{{ route('purchase-orders.index') }}"
                class="inline-flex items-center px-4 py-2 bg-gray-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-gray-500">
-                Back
+                Kembali
             </a>
         </div>
     </x-slot>
@@ -28,7 +28,7 @@
 
                         {{-- Supplier --}}
                         <div>
-                            <x-input-label for="supplier_id" :value="__('Supplier')" />
+                            <x-input-label for="supplier_id" :value="'Supplier'" />
 
                             <select
                                 name="supplier_id"
@@ -36,7 +36,7 @@
                                 class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
                                 required
                             >
-                                <option value="">Select Supplier</option>
+                                <option value="">Pilih Supplier</option>
 
                                 @foreach($suppliers as $supplier)
                                     <option value="{{ $supplier->id }}"
@@ -51,7 +51,7 @@
 
                         {{-- PO Date --}}
                         <div>
-                            <x-input-label for="po_date" :value="__('PO Date')" />
+                            <x-input-label for="po_date" :value="'Tanggal PO'" />
 
                             <x-text-input
                                 id="po_date"
@@ -67,7 +67,7 @@
 
                         {{-- Status --}}
                         <div>
-                            <x-input-label for="status" :value="__('Status')" />
+                            <x-input-label for="status" :value="'Status'" />
 
                             <select
                                 name="status"
@@ -88,7 +88,7 @@
 
                         {{-- Notes --}}
                         <div>
-                            <x-input-label for="notes" :value="__('Notes')" />
+                            <x-input-label for="notes" :value="'Catatan'" />
 
                             <textarea
                                 name="notes"
@@ -104,14 +104,14 @@
                         <div class="mt-8">
 
                             <div class="flex items-center justify-between mb-4">
-                                <h3 class="text-lg font-semibold text-gray-800">PO Items</h3>
+                                <h3 class="text-lg font-semibold text-gray-800">Item PO</h3>
 
                                 <button
                                     type="button"
                                     id="add-row"
                                     class="inline-flex items-center px-4 py-2 bg-indigo-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-indigo-500"
                                 >
-                                    Add Item
+                                    Tambah Item
                                 </button>
                             </div>
 
@@ -120,15 +120,15 @@
 
                                     <thead class="bg-gray-50">
                                         <tr>
-                                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
-                                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Purchase Qty</th>
-                                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Purchase Unit</th>
-                                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Quantity</th>
-                                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Unit</th>
-                                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Price / Unit</th>
-                                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Discount %</th>
+                                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Produk</th>
+                                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Qty Beli</th>
+                                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Satuan Beli</th>
+                                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Kuantitas</th>
+                                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Satuan</th>
+                                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Harga / Satuan</th>
+                                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Diskon %</th>
                                             <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Subtotal</th>
-                                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Action</th>
+                                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Aksi</th>
                                         </tr>
                                     </thead>
 
@@ -142,7 +142,7 @@
                                             {{-- Product --}}
                                             <td class="px-4 py-3 w-72">
                                                 <select name="product_id[]" class="product-select w-full border-gray-300 rounded-md shadow-sm">
-                                                    <option value="">Select Product</option>
+                                                    <option value="">Pilih Produk</option>
                                                     @foreach($products as $product)
                                                         <option value="{{ $product->id }}"
                                                             {{ $detail->product_id == $product->id ? 'selected' : '' }}>
@@ -216,7 +216,7 @@
                                             {{-- Action --}}
                                             <td class="px-4 py-3">
                                                 <button type="button" class="remove-row text-red-600 hover:text-red-800">
-                                                    Remove
+                                                    Hapus
                                                 </button>
                                             </td>
                                         </tr>
@@ -227,7 +227,7 @@
                                     <tfoot class="bg-gray-50">
                                         <tr>
                                             <td colspan="7" class="px-4 py-3 text-right text-sm font-bold text-gray-700">
-                                                Grand Total
+                                                Total Keseluruhan
                                             </td>
                                             <td class="px-4 py-3 text-sm font-bold text-gray-900 whitespace-nowrap" id="grand-total">
                                                 0.00
@@ -245,11 +245,11 @@
                         <div class="flex items-center justify-end gap-4">
                             <a href="{{ route('purchase-orders.index') }}"
                                class="underline text-sm text-gray-600 hover:text-gray-900">
-                                Cancel
+                                Batal
                             </a>
 
                             <x-primary-button>
-                                Update Purchase Order
+                                Perbarui Purchase Order
                             </x-primary-button>
                         </div>
 
@@ -371,7 +371,7 @@
                     <input type="hidden" name="detail_id[]" value="">
                     <td class="px-4 py-3 w-72">
                         <select name="product_id[]" class="product-select w-full border-gray-300 rounded-md shadow-sm">
-                            <option value="">Select Product</option>
+                            <option value="">Pilih Produk</option>
                             ${productOptionsHTML}
                         </select>
                     </td>
@@ -400,7 +400,7 @@
                         <span class="subtotal-display text-sm font-semibold text-gray-800">0.00</span>
                     </td>
                     <td class="px-4 py-3">
-                        <button type="button" class="remove-row text-red-600 hover:text-red-800">Remove</button>
+                        <button type="button" class="remove-row text-red-600 hover:text-red-800">Hapus</button>
                     </td>
                 `;
 

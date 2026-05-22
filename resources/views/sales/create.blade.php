@@ -6,7 +6,7 @@
             </h2>
             <a href="{{ route('sales.index') }}"
                class="inline-flex items-center px-4 py-2 bg-gray-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-gray-500">
-                Back
+                Kembali
             </a>
         </div>
     </x-slot>
@@ -14,6 +14,12 @@
     <div class="py-12">
         <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
             <div class="bg-white shadow-sm sm:rounded-lg p-6">
+
+                @if(session('error'))
+                    <div class="mb-4 px-4 py-3 bg-red-100 border border-red-300 text-red-800 rounded-md text-sm font-medium">
+                        ⚠ {{ session('error') }}
+                    </div>
+                @endif
 
                 @if($errors->any())
                     <div class="mb-4 px-4 py-3 bg-red-100 text-red-800 rounded-md text-sm">
@@ -28,7 +34,7 @@
 
                         {{-- Customer --}}
                         <div>
-                            <x-input-label for="customer_id" :value="__('Customer')" />
+                            <x-input-label for="customer_id" :value="__('Pelanggan')" />
                             <select name="customer_id" id="customer_id"
                                 class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
                                 <option value="">Walk-in Customer</option>
@@ -76,7 +82,7 @@
                             <x-input-error :messages="$errors->get('payment_status')" class="mt-2" />
                         </div>
 
-                        {{-- Due Date (muncul kalau Belum Bayar) --}}
+                        {{-- Due Date --}}
                         <div id="due-date-section" class="hidden">
                             <x-input-label for="due_date" :value="__('Jatuh Tempo')" />
                             <x-text-input id="due_date" name="due_date" type="date"
@@ -86,40 +92,36 @@
 
                         {{-- Notes --}}
                         <div>
-                            <x-input-label for="notes" :value="__('Notes')" />
+                            <x-input-label for="notes" :value="__('Catatan')" />
                             <textarea name="notes" id="notes" rows="2"
                                 class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500">{{ old('notes') }}</textarea>
                         </div>
 
                         {{-- Items --}}
                         <div class="mt-8">
-                            <div class="flex items-center justify-between mb-4">
+                            <div class="mb-4">
                                 <h3 class="text-lg font-semibold text-gray-800">Detail Barang</h3>
-                                <button type="button" id="add-row"
-                                    class="inline-flex items-center px-4 py-2 bg-indigo-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-indigo-500">
-                                    Add Item
-                                </button>
                             </div>
 
                             <div class="overflow-x-auto rounded-lg border border-gray-200">
                                 <table class="min-w-full divide-y divide-gray-200">
                                     <thead class="bg-gray-50">
                                         <tr>
-                                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
+                                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Produk</th>
                                             <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Stok</th>
                                             <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Qty</th>
-                                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Unit</th>
-                                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Harga / Unit</th>
-                                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Discount %</th>
+                                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Satuan</th>
+                                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Harga / Satuan</th>
+                                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Diskon %</th>
                                             <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Subtotal</th>
-                                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Action</th>
+                                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Aksi</th>
                                         </tr>
                                     </thead>
                                     <tbody id="sale-items-body" class="bg-white divide-y divide-gray-200">
                                         <tr>
                                             <td class="px-4 py-3 w-72">
                                                 <select name="product_id[]" class="product-select w-full border-gray-300 rounded-md shadow-sm">
-                                                    <option value="">Select Product</option>
+                                                    <option value="">Pilih Produk</option>
                                                     @foreach($products as $product)
                                                         <option value="{{ $product->id }}">
                                                             {{ $product->product_name }}
@@ -151,7 +153,7 @@
                                             </td>
                                             <td class="px-4 py-3">
                                                 <button type="button" class="remove-row text-red-600 hover:text-red-800 text-sm">
-                                                    Remove
+                                                    Hapus
                                                 </button>
                                             </td>
                                         </tr>
@@ -159,7 +161,7 @@
                                     <tfoot class="bg-gray-50">
                                         <tr>
                                             <td colspan="6" class="px-4 py-3 text-right text-sm font-bold text-gray-700">
-                                                Grand Total
+                                                Total Keseluruhan
                                             </td>
                                             <td class="px-4 py-3 text-sm font-bold text-green-700 whitespace-nowrap" id="grand-total">
                                                 Rp 0
@@ -169,13 +171,21 @@
                                     </tfoot>
                                 </table>
                             </div>
+
+                            {{-- Tombol Tambah Barang di bawah tabel --}}
+                            <div class="mt-3">
+                                <button type="button" id="add-row"
+                                    class="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-indigo-500">
+                                    + Tambah Barang
+                                </button>
+                            </div>
                         </div>
 
                         {{-- Buttons --}}
                         <div class="flex items-center justify-end gap-4">
                             <a href="{{ route('sales.index') }}"
-                               class="underline text-sm text-gray-600 hover:text-gray-900">Cancel</a>
-                            <x-primary-button>Save Penjualan</x-primary-button>
+                               class="underline text-sm text-gray-600 hover:text-gray-900">Batal</a>
+                            <x-primary-button>Simpan Penjualan</x-primary-button>
                         </div>
 
                     </div>
@@ -208,8 +218,8 @@
 
             // ─── Payment method & status logic ───────────────────────────────
 
-            const paymentMethod = document.getElementById('payment_method');
-            const paymentStatus = document.getElementById('payment_status');
+            const paymentMethod  = document.getElementById('payment_method');
+            const paymentStatus  = document.getElementById('payment_status');
             const dueDateSection = document.getElementById('due-date-section');
 
             function toggleDueDate() {
@@ -298,7 +308,7 @@
                 tr.innerHTML = `
                     <td class="px-4 py-3 w-72">
                         <select name="product_id[]" class="product-select w-full border-gray-300 rounded-md shadow-sm">
-                            <option value="">Select Product</option>
+                            <option value="">Pilih Produk</option>
                             ${productOptionsHTML}
                         </select>
                     </td>
@@ -325,13 +335,16 @@
                         <span class="subtotal-display text-sm font-semibold text-gray-800">Rp 0</span>
                     </td>
                     <td class="px-4 py-3">
-                        <button type="button" class="remove-row text-red-600 hover:text-red-800 text-sm">Remove</button>
+                        <button type="button" class="remove-row text-red-600 hover:text-red-800 text-sm">Hapus</button>
                     </td>
                 `;
 
                 tbody.appendChild(tr);
                 initializeTomSelect(tr.querySelector('.product-select'));
                 attachRowListeners(tr);
+
+                // ✅ Scroll ke baris baru
+                tr.scrollIntoView({ behavior: 'smooth', block: 'center' });
             });
 
             // ─── Remove row ───────────────────────────────────────────────────

@@ -7,13 +7,15 @@ use Illuminate\Http\Request;
 
 class RoleMiddleware
 {
-    public function handle(Request $request, Closure $next, string $role)
+    public function handle(Request $request, Closure $next, string ...$roles)
     {
         if (!auth()->check()) {
             return redirect()->route('login');
         }
 
-        if (auth()->user()->role->role_name !== $role) {
+        $userRole = auth()->user()->role?->role_name;
+
+        if (!in_array($userRole, $roles)) {
             abort(403, 'Akses tidak diizinkan.');
         }
 

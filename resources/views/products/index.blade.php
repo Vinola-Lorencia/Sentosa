@@ -5,8 +5,7 @@
                 Produk
             </h2>
             <a href="{{ route('products.create') }}"
-               style="background-color:#111;color:#fff;"
-               class="inline-flex items-center px-4 py-2 border border-transparent rounded-md font-semibold text-xs uppercase tracking-widest hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-500 shadow-sm">
+               class="inline-flex items-center px-4 py-2 bg-indigo-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm">
                 Tambah Produk
             </a>
         </div>
@@ -22,17 +21,6 @@
                         {{ session('success') }}
                     </div>
                 @endif
-
-                {{-- Bagian Atas --}}
-                <div class="mb-6 flex items-center justify-between">
-                    <h3 class="text-lg font-semibold text-gray-900">
-                        Daftar Produk
-                    </h3>
-                    <a href="{{ route('products.create') }}"
-                       class="inline-flex items-center px-4 py-2 bg-indigo-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-indigo-500">
-                        Tambah Produk
-                    </a>
-                </div>
 
                 {{-- Form Filter --}}
                 <form method="GET" action="{{ route('products.index') }}"

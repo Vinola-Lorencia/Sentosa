@@ -2,14 +2,14 @@
     <x-slot name="header">
         <div class="flex items-center justify-between">
             <h2 class="font-semibold text-xl text-gray-800 leading-tight">
-                Purchase Order Detail
+                Detail Purchase Order
             </h2>
 
             {{-- Tombol Send WA --}}
             <a href="{{ route('purchase-orders.send-whatsapp', $purchaseOrder->po_id) }}"
                target="_blank"
                class="inline-flex items-center px-4 py-2 bg-green-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-green-500">
-                📲 Send WA
+                📲 Kirim WA
             </a>
         </div>
     </x-slot>
@@ -21,7 +21,7 @@
 
                 <div class="mb-6">
                     <p>
-                        <strong>PO Number:</strong>
+                        <strong>No. PO:</strong>
                         {{ 'PO-' . str_pad($purchaseOrder->po_id, 3, '0', STR_PAD_LEFT) }}
                     </p>
                     <p>
@@ -29,7 +29,7 @@
                         {{ $purchaseOrder->supplier->supplier_name }}
                     </p>
                     <p>
-                        <strong>Date:</strong>
+                        <strong>Tanggal:</strong>
                         {{ $purchaseOrder->po_date }}
                     </p>
                     <p>
@@ -37,7 +37,7 @@
                         {{ $purchaseOrder->status }}
                     </p>
                     <p>
-                        <strong>Notes:</strong>
+                        <strong>Catatan:</strong>
                         {{ $purchaseOrder->notes }}
                     </p>
                 </div>
@@ -47,25 +47,25 @@
                     <thead class="bg-gray-50">
                         <tr>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                                Product
+                                Produk
                             </th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                                Purchase Quantity
+                                Qty Beli
                             </th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                                Purchase Unit
+                                Satuan Beli
                             </th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                                Qty
+                                Kuantitas
                             </th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                                Unit
+                                Satuan
                             </th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                                Price
+                                Harga
                             </th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                                Discount
+                                Diskon
                             </th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                                 Subtotal
@@ -109,7 +109,7 @@
                     <tfoot class="bg-gray-50">
                         <tr>
                             <td colspan="7" class="px-6 py-4 text-right font-semibold text-gray-700">
-                                Grand Total
+                                Total Keseluruhan
                             </td>
                             <td class="px-6 py-4 font-bold text-gray-900 whitespace-nowrap">
                                 Rp {{ number_format($purchaseOrder->details->sum('subtotal'), 0, ',', '.') }}

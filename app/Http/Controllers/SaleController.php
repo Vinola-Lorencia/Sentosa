@@ -49,79 +49,85 @@ class SaleController extends Controller
             'due_date'       => 'nullable|date',
         ]);
 
-        DB::transaction(function () use ($request) {
+        try {
+            DB::transaction(function () use ($request) {
 
-            $productIds = $request->product_id;
-            $quantities = $request->quantity;
-            $prices     = $request->price;
-            $discounts  = $request->discount;
-            $units      = $request->unit;
+                $productIds = $request->product_id;
+                $quantities = $request->quantity;
+                $prices     = $request->price;
+                $discounts  = $request->discount;
+                $units      = $request->unit;
 
-            // Cek stok dulu
-            foreach ($productIds as $i => $productId) {
-                $product = Product::findOrFail($productId);
-                if ($product->stock < $quantities[$i]) {
-                    throw new \Exception("Stok {$product->product_name} tidak mencukupi. Stok tersedia: {$product->stock}");
+                // Cek stok dulu
+                foreach ($productIds as $i => $productId) {
+                    $product = Product::findOrFail($productId);
+                    if ($product->stock < $quantities[$i]) {
+                        throw new \Exception("Stok {$product->product_name} tidak mencukupi. Stok tersedia: {$product->stock} {$product->sale_unit}");
+                    }
                 }
-            }
 
-            // Hitung total
-            $totalAmount = 0;
-            foreach ($productIds as $i => $productId) {
-                $qty      = $quantities[$i];
-                $price    = $prices[$i];
-                $discount = $discounts[$i] ?? 0;
-                $totalAmount += $qty * $price * (1 - $discount / 100);
-            }
+                // Hitung total
+                $totalAmount = 0;
+                foreach ($productIds as $i => $productId) {
+                    $qty      = $quantities[$i];
+                    $price    = $prices[$i];
+                    $discount = $discounts[$i] ?? 0;
+                    $totalAmount += $qty * $price * (1 - $discount / 100);
+                }
 
-            // Simpan header sale
-            $sale = new Sale();
-            $sale->customer_id     = $request->customer_id ?: null;
-            $sale->user_id         = Auth::id();
-            $sale->sale_date       = $request->sale_date;
-            $sale->payment_method  = $request->payment_method;
-            $sale->payment_status  = $request->payment_status;
-            $sale->paid_date       = $request->payment_status === 'Lunas' ? $request->sale_date : null;
-            $sale->total_amount    = $totalAmount;
-            $sale->notes           = $request->notes;
-            $sale->save();
+                // Simpan header sale
+                $sale = new Sale();
+                $sale->customer_id    = $request->customer_id ?: null;
+                $sale->user_id        = Auth::id();
+                $sale->sale_date      = $request->sale_date;
+                $sale->payment_method = $request->payment_method;
+                $sale->payment_status = $request->payment_status;
+                $sale->paid_date      = $request->payment_status === 'Lunas' ? $request->sale_date : null;
+                $sale->total_amount   = $totalAmount;
+                $sale->notes          = $request->notes;
+                $sale->save();
 
-            // Simpan detail + kurangi stok
-            foreach ($productIds as $i => $productId) {
-                $qty      = $quantities[$i];
-                $price    = $prices[$i];
-                $discount = $discounts[$i] ?? 0;
-                $subtotal = $qty * $price * (1 - $discount / 100);
+                // Simpan detail + kurangi stok
+                foreach ($productIds as $i => $productId) {
+                    $qty      = $quantities[$i];
+                    $price    = $prices[$i];
+                    $discount = $discounts[$i] ?? 0;
+                    $subtotal = $qty * $price * (1 - $discount / 100);
 
-                $detail = new SaleDetail();
-                $detail->sale_id    = $sale->sale_id;
-                $detail->product_id = $productId;
-                $detail->quantity   = $qty;
-                $detail->unit       = $units[$i] ?? '';
-                $detail->price      = $price;
-                $detail->discount   = $discount;
-                $detail->subtotal   = $subtotal;
-                $detail->save();
+                    $detail = new SaleDetail();
+                    $detail->sale_id    = $sale->sale_id;
+                    $detail->product_id = $productId;
+                    $detail->quantity   = $qty;
+                    $detail->unit       = $units[$i] ?? '';
+                    $detail->price      = $price;
+                    $detail->discount   = $discount;
+                    $detail->subtotal   = $subtotal;
+                    $detail->save();
 
-                // Kurangi stok
-                $product = Product::findOrFail($productId);
-                $product->stock -= $qty;
-                $product->save();
-            }
+                    $product = Product::findOrFail($productId);
+                    $product->stock -= $qty;
+                    $product->save();
+                }
 
-            // Buat receivable kalau Utang atau Belum Bayar
-            if ($request->payment_status === 'Belum Bayar') {
-                $receivable = new Receivable();
-                $receivable->sale_id          = $sale->sale_id;
-                $receivable->customer_id      = $sale->customer_id;
-                $receivable->due_date         = $request->due_date;
-                $receivable->amount           = $totalAmount;
-                $receivable->paid_amount      = 0;
-                $receivable->remaining_amount = $totalAmount;
-                $receivable->status           = 'Unpaid';
-                $receivable->save();
-            }
-        });
+                // Buat receivable kalau Belum Bayar
+                if ($request->payment_status === 'Belum Bayar') {
+                    $receivable = new Receivable();
+                    $receivable->sale_id          = $sale->sale_id;
+                    $receivable->customer_id      = $sale->customer_id;
+                    $receivable->due_date         = $request->due_date;
+                    $receivable->amount           = $totalAmount;
+                    $receivable->paid_amount      = 0;
+                    $receivable->remaining_amount = $totalAmount;
+                    $receivable->status           = 'Unpaid';
+                    $receivable->save();
+                }
+            });
+
+        } catch (\Exception $e) {
+            return redirect()->back()
+                ->withInput()
+                ->with('error', $e->getMessage());
+        }
 
         return redirect()
             ->route('sales.index')
@@ -168,83 +174,88 @@ class SaleController extends Controller
             'due_date'       => 'nullable|date',
         ]);
 
-        DB::transaction(function () use ($request, $sale) {
+        try {
+            DB::transaction(function () use ($request, $sale) {
 
-            // Kembalikan stok lama
-            foreach ($sale->details as $oldDetail) {
-                $product = Product::findOrFail($oldDetail->product_id);
-                $product->stock += $oldDetail->quantity;
-                $product->save();
-            }
-
-            $sale->details()->delete();
-
-            $productIds = $request->product_id;
-            $quantities = $request->quantity;
-            $prices     = $request->price;
-            $discounts  = $request->discount;
-            $units      = $request->unit;
-
-            // Cek stok baru
-            foreach ($productIds as $i => $productId) {
-                $product = Product::findOrFail($productId);
-                if ($product->stock < $quantities[$i]) {
-                    throw new \Exception("Stok {$product->product_name} tidak mencukupi. Stok tersedia: {$product->stock}");
+                // Kembalikan stok lama
+                foreach ($sale->details as $oldDetail) {
+                    $product = Product::findOrFail($oldDetail->product_id);
+                    $product->stock += $oldDetail->quantity;
+                    $product->save();
                 }
-            }
 
-            $totalAmount = 0;
+                $sale->details()->delete();
 
-            foreach ($productIds as $i => $productId) {
-                $qty      = $quantities[$i];
-                $price    = $prices[$i];
-                $discount = $discounts[$i] ?? 0;
-                $subtotal = $qty * $price * (1 - $discount / 100);
-                $totalAmount += $subtotal;
+                $productIds = $request->product_id;
+                $quantities = $request->quantity;
+                $prices     = $request->price;
+                $discounts  = $request->discount;
+                $units      = $request->unit;
 
-                $detail = new SaleDetail();
-                $detail->sale_id    = $sale->sale_id;
-                $detail->product_id = $productId;
-                $detail->quantity   = $qty;
-                $detail->unit       = $units[$i] ?? '';
-                $detail->price      = $price;
-                $detail->discount   = $discount;
-                $detail->subtotal   = $subtotal;
-                $detail->save();
-
-                $product = Product::findOrFail($productId);
-                $product->stock -= $qty;
-                $product->save();
-            }
-
-            // Update header
-            $sale->customer_id    = $request->customer_id ?: null;
-            $sale->sale_date      = $request->sale_date;
-            $sale->payment_method = $request->payment_method;
-            $sale->payment_status = $request->payment_status;
-            $sale->paid_date      = $request->payment_status === 'Lunas' ? now()->toDateString() : null;
-            $sale->total_amount   = $totalAmount;
-            $sale->notes          = $request->notes;
-            $sale->save();
-
-            // Update receivable
-            if ($request->payment_status === 'Belum Bayar') {
-                // Buat atau update receivable
-                $receivable = $sale->receivable ?? new Receivable();
-                $receivable->sale_id     = $sale->sale_id;
-                $receivable->customer_id = $sale->customer_id;
-                $receivable->due_date    = $request->due_date;
-                $receivable->amount      = $totalAmount;
-                $receivable->status      = 'Unpaid';
-                $receivable->save();
-            } else {
-                // Lunas — hapus receivable kalau ada
-                if ($sale->receivable) {
-                    $sale->receivable->status = 'Paid';
-                    $sale->receivable->save();
+                // Cek stok baru
+                foreach ($productIds as $i => $productId) {
+                    $product = Product::findOrFail($productId);
+                    if ($product->stock < $quantities[$i]) {
+                        throw new \Exception("Stok {$product->product_name} tidak mencukupi. Stok tersedia: {$product->stock} {$product->sale_unit}");
+                    }
                 }
-            }
-        });
+
+                $totalAmount = 0;
+
+                foreach ($productIds as $i => $productId) {
+                    $qty      = $quantities[$i];
+                    $price    = $prices[$i];
+                    $discount = $discounts[$i] ?? 0;
+                    $subtotal = $qty * $price * (1 - $discount / 100);
+                    $totalAmount += $subtotal;
+
+                    $detail = new SaleDetail();
+                    $detail->sale_id    = $sale->sale_id;
+                    $detail->product_id = $productId;
+                    $detail->quantity   = $qty;
+                    $detail->unit       = $units[$i] ?? '';
+                    $detail->price      = $price;
+                    $detail->discount   = $discount;
+                    $detail->subtotal   = $subtotal;
+                    $detail->save();
+
+                    $product = Product::findOrFail($productId);
+                    $product->stock -= $qty;
+                    $product->save();
+                }
+
+                // Update header
+                $sale->customer_id    = $request->customer_id ?: null;
+                $sale->sale_date      = $request->sale_date;
+                $sale->payment_method = $request->payment_method;
+                $sale->payment_status = $request->payment_status;
+                $sale->paid_date      = $request->payment_status === 'Lunas' ? now()->toDateString() : null;
+                $sale->total_amount   = $totalAmount;
+                $sale->notes          = $request->notes;
+                $sale->save();
+
+                // Update receivable
+                if ($request->payment_status === 'Belum Bayar') {
+                    $receivable = $sale->receivable ?? new Receivable();
+                    $receivable->sale_id     = $sale->sale_id;
+                    $receivable->customer_id = $sale->customer_id;
+                    $receivable->due_date    = $request->due_date;
+                    $receivable->amount      = $totalAmount;
+                    $receivable->status      = 'Unpaid';
+                    $receivable->save();
+                } else {
+                    if ($sale->receivable) {
+                        $sale->receivable->status = 'Paid';
+                        $sale->receivable->save();
+                    }
+                }
+            });
+
+        } catch (\Exception $e) {
+            return redirect()->back()
+                ->withInput()
+                ->with('error', $e->getMessage());
+        }
 
         return redirect()
             ->route('sales.show', $sale->sale_id)
@@ -276,6 +287,7 @@ class SaleController extends Controller
             ->route('sales.index')
             ->with('success', 'Transaksi penjualan berhasil dihapus.');
     }
+
     public function tandaiDiproses(string $id)
     {
         $sale = Sale::findOrFail($id);

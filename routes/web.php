@@ -21,6 +21,7 @@ Route::get('/', function () {
     return redirect()->route('login');
 });
 
+
 Route::get('/dashboard', [DashboardController::class, 'index'])
     ->middleware(['auth', 'role:Pemilik'])
     ->name('dashboard');

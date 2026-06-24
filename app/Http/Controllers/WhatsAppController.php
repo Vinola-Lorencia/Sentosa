@@ -33,41 +33,52 @@ class WhatsAppController extends Controller
         $productsToShow = collect();
 
         try {
-            // Step-based routing takes priority over intent detection
-            if ($session->step === 'need_name') {
-                $session->customer_name = trim($body);
-                $session->step          = 'need_address';
-                $reply = "Terima kasih, *{$session->customer_name}*! Sekarang tolong berikan alamat pengiriman Anda.";
+            $handled = false;
 
-            } elseif ($session->step === 'need_address') {
-                $session->address = trim($body);
-                $session->save();
-                [$reply, $productsToShow] = $this->createOrder($session);
-
-            } else {
-                // Stage 1: GPT extracts intent, mode, and keywords in one fast call
-                $intent    = $this->extractIntent($body);
-                $mode      = $intent['mode']       ?? 'chat';
-                $keywords  = $intent['keywords']    ?? [];
-                $bulkItems = $intent['bulk_items']  ?? [];
-
-                if ($mode === 'cancel') {
-                    $session->cart = [];
-                    $session->save();
-                    $reply = 'Pesanan dibatalkan. Ada yang bisa kami bantu lagi?';
-
-                } elseif ($mode === 'done') {
-                    if (empty($session->cart)) {
-                        $reply = 'Belum ada produk dalam keranjang. Silakan pilih produk terlebih dahulu.';
+            // ── Priority 0: cart inquiry at ANY step ─────────────────────────────
+            if ($this->isLikelyCartQuery($body)) {
+                if (empty($session->cart)) {
+                    $reply = 'Keranjang masih kosong. Silakan pilih produk terlebih dahulu.';
+                } else {
+                    $reply = $this->formatCartSummary($session->cart);
+                    if ($session->step === 'confirm_order') {
+                        $reply .= "\n\nKetik *ya* untuk konfirmasi atau *batal* untuk membatalkan.";
                     } else {
-                        $reply = $this->formatCartSummary($session->cart)
-                               . "\n\nKetik *ya* untuk konfirmasi atau *batal* untuk membatalkan.";
+                        $reply .= "\n\nKetik *selesai* jika sudah selesai berbelanja.";
                     }
+                }
+                $handled = true;
+            }
 
-                } elseif ($mode === 'confirm') {
-                    if (empty($session->cart)) {
-                        $reply = 'Belum ada produk dalam keranjang. Silakan pilih produk terlebih dahulu.';
-                    } elseif (empty($session->customer_name)) {
+            // ── Priority 1a: collecting name ──────────────────────────────────────
+            if (!$handled && $session->step === 'need_name') {
+                if ($this->isLikelyNonInput($body)) {
+                    // Looks like a question/command — fall through to intent detection
+                } else {
+                    $session->customer_name = trim($body);
+                    $session->step          = 'need_address';
+                    $session->save();
+                    $reply   = "Terima kasih, *{$session->customer_name}*! Sekarang tolong berikan alamat pengiriman Anda.";
+                    $handled = true;
+                }
+            }
+
+            // ── Priority 1b: collecting address ───────────────────────────────────
+            if (!$handled && $session->step === 'need_address') {
+                if ($this->isLikelyNonInput($body)) {
+                    // Looks like a question/command — fall through to intent detection
+                } else {
+                    $session->address = trim($body);
+                    $session->save();
+                    [$reply, $productsToShow] = $this->createOrder($session);
+                    $handled = true;
+                }
+            }
+
+            // ── Priority 1c: waiting for explicit order confirmation ───────────────
+            if (!$handled && $session->step === 'confirm_order') {
+                if ($this->isConfirmation($body)) {
+                    if (empty($session->customer_name)) {
                         $session->step = 'need_name';
                         $session->save();
                         $reply = 'Siap! Boleh minta nama Anda untuk pesanan ini?';
@@ -77,6 +88,35 @@ class WhatsAppController extends Controller
                         $reply = "Boleh minta alamat pengirimannya, *{$session->customer_name}*?";
                     } else {
                         [$reply, $productsToShow] = $this->createOrder($session);
+                    }
+                    $handled = true;
+                }
+                // Not a confirmation — fall through to intent detection
+                // (allows customer to ask questions or add more items)
+            }
+
+            // ── Priority 2: intent-based routing ─────────────────────────────────
+            if (!$handled) {
+                $intent    = $this->extractIntent($body);
+                $mode      = $intent['mode']      ?? 'chat';
+                $keywords  = $intent['keywords']   ?? [];
+                $bulkItems = $intent['bulk_items'] ?? [];
+
+                if ($mode === 'cancel') {
+                    $session->cart = [];
+                    $session->step = 'chat';
+                    $session->save();
+                    $reply = 'Pesanan dibatalkan. Ada yang bisa kami bantu lagi?';
+
+                } elseif ($mode === 'done' || $mode === 'confirm') {
+                    // Both "selesai" and "ya/iya" without confirm_order step → show cart + ask
+                    if (empty($session->cart)) {
+                        $reply = 'Belum ada produk dalam keranjang. Silakan pilih produk terlebih dahulu.';
+                    } else {
+                        $reply = $this->formatCartSummary($session->cart)
+                               . "\n\nKetik *YA* untuk konfirmasi pesanan, atau *batal* untuk membatalkan.";
+                        $session->step = 'confirm_order';
+                        $session->save();
                     }
 
                 } elseif ($mode === 'bulk' && !empty($bulkItems)) {
@@ -100,12 +140,14 @@ class WhatsAppController extends Controller
                     }
 
                     $history   = $session->messages ?? [];
-                    $history[] = ['role' => 'user',      'content' => $body];
-                    $history[] = ['role' => 'assistant',  'content' => $reply];
+                    $history[] = ['role' => 'user',     'content' => $body];
+                    $history[] = ['role' => 'assistant', 'content' => $reply];
 
                     $session->cart     = $cart;
                     $session->messages = $history;
-                    $session->step     = 'chat';
+                    if (!in_array($session->step, ['confirm_order', 'need_name', 'need_address'])) {
+                        $session->step = 'chat';
+                    }
                     $session->save();
                 }
             }
@@ -125,19 +167,69 @@ class WhatsAppController extends Controller
         try {
             $this->sendMessage($from, $reply);
 
-            $baseUrl = rtrim(env('FILESYSTEM_URL', env('APP_URL')), '/');
+            $baseUrl     = rtrim(env('FILESYSTEM_URL', env('APP_URL')), '/');
+            $isLocalhost = str_contains($baseUrl, 'localhost') || str_contains($baseUrl, '127.0.0.1');
+
             foreach ($productsToShow as $product) {
-                $imageUrl = $baseUrl . '/storage/' . $product->image;
-                $caption  = "📦 *{$product->product_name}*\n"
-                          . "💰 Rp" . number_format($product->sale_price, 0, ',', '.') . "/{$product->sale_unit}\n"
-                          . "📦 Stok: {$product->stock} {$product->sale_unit}";
-                $this->sendMessage($from, $caption, $imageUrl);
+                $imageUrl = $baseUrl . '/storage_link/' . ltrim((string)$product->image, '/');
+
+                \Log::info('WhatsApp image debug', [
+                    'product'     => $product->product_name,
+                    'image_field' => $product->image,
+                    'image_url'   => $imageUrl,
+                    'localhost'   => $isLocalhost,
+                ]);
+
+                $caption = "📦 *{$product->product_name}*\n"
+                         . "💰 Rp" . number_format($product->sale_price, 0, ',', '.') . "/{$product->sale_unit}\n"
+                         . "📦 Stok: {$product->stock} {$product->sale_unit}";
+
+                if ($isLocalhost) {
+                    // Twilio cannot fetch localhost URLs — send text-only with a note
+                    $caption .= "\n🖼️ _(Gambar tersedia di sistem)_";
+                    $this->sendMessage($from, $caption);
+                } else {
+                    $this->sendMessage($from, $caption, $imageUrl);
+                }
             }
         } catch (\Throwable $e) {
             \Log::error('Twilio send failed: ' . $e->getMessage(), ['to' => $from]);
         }
 
         return response('', 200);
+    }
+
+    // ─── Conversation guard helpers ───────────────────────────────────────────
+
+    private function isLikelyCartQuery(string $body): bool
+    {
+        $lower = strtolower($body);
+        foreach (['total', 'berapa', 'lihat', 'keranjang', 'ringkasan', 'summary', 'cart'] as $kw) {
+            if (str_contains($lower, $kw)) return true;
+        }
+        return false;
+    }
+
+    private function isLikelyNonInput(string $body): bool
+    {
+        // True when the message looks like a question or command, not a name/address
+        if (str_contains($body, '?')) return true;
+        $lower = strtolower($body);
+        $flags = [
+            'total', 'berapa', 'lihat', 'tidak', 'engga', 'enggak', 'nggak', 'batal',
+            'cancel', 'iya', 'ya', 'ok', 'oke', 'okay', 'setuju', 'selesai', 'pesan',
+            'order', 'beli', 'gambar', 'foto', 'harga', 'stok', 'info', 'mau', 'ingin',
+        ];
+        foreach ($flags as $kw) {
+            if (str_contains($lower, $kw)) return true;
+        }
+        return false;
+    }
+
+    private function isConfirmation(string $body): bool
+    {
+        $lower = strtolower(trim($body));
+        return in_array($lower, ['ya', 'iya', 'ok', 'oke', 'okay', 'setuju', 'yes', 'yep', 'yap', 'confirm']);
     }
 
     // ─── Stage 1: intent + keyword extraction (no product list needed) ────────
@@ -158,19 +250,39 @@ class WhatsAppController extends Controller
 }
 
 Panduan mode:
-- "bulk": pesan berisi BANYAK item sekaligus dengan jumlah masing-masing (contoh: "panci 2 lusin, bangku 3 lusin, ember 5 lusin")
-- "chat": pertanyaan, satu produk, atau percakapan umum
-- "confirm": setuju/konfirmasi pesanan ("ya", "iya", "ok", "setuju", "benar", "lanjut", "pesan", "order")
+- "bulk": pesan mengandung LEBIH DARI SATU produk dengan jumlah, ATAU satu produk dengan jumlah yang dipisah koma/newline. WAJIB bulk jika ada koma yang memisahkan item produk berbeda (contoh: "panci 2 lusin, mangkok 3 lusin, ember 5 lusin" → HARUS bulk). Jika ragu antara bulk dan chat, pilih bulk.
+- "chat": pertanyaan umum, tanya harga/stok SATU produk saja, atau percakapan tanpa angka pemesanan
+- "confirm": setuju/konfirmasi pesanan ("ya", "iya", "ok", "setuju", "benar", "lanjut")
 - "done": selesai memilih ("udah", "cukup", "itu saja", "sudah", "selesai", "segitu saja")
 - "cancel": batalkan ("batal", "cancel", "tidak jadi")
 
-bulk_items hanya diisi saat mode=bulk. unit default "buah" jika tidak disebutkan.',
+⚠️ ATURAN WAJIB:
+- Jika pesan mengandung koma (,) dan setiap bagian berisi nama produk + angka → mode HARUS "bulk"
+- Ekstrak qty dan unit PERSIS seperti yang dikatakan pelanggan. JANGAN konversi atau ubah satuan.
+- Contoh BENAR: "3 lusin" → {"qty": 3, "unit": "lusin"}
+- Contoh SALAH: "3 lusin" → {"qty": 36, "unit": "buah"} ← DILARANG
+- unit default "buah" jika tidak disebutkan sama sekali.',
                 ],
                 ['role' => 'user', 'content' => $body],
             ],
         ]);
 
-        return json_decode($response->choices[0]->message->content, true) ?? [];
+        $intent = json_decode($response->choices[0]->message->content, true) ?? [];
+
+        // Safety net: if the message contains commas and at least 2 number+word pairs,
+        // force mode=bulk regardless of what GPT returned.
+        if (($intent['mode'] ?? '') !== 'bulk') {
+            $parts = preg_split('/[,\n]+/', $body);
+            $itemLike = array_filter($parts, fn ($p) => preg_match('/\d/', $p) && preg_match('/[a-zA-Z]/', $p));
+            if (count($itemLike) >= 2) {
+                \Log::info('Intent override → bulk (comma+number pattern)', ['original_mode' => $intent['mode'] ?? null, 'body' => $body]);
+                $intent['mode'] = 'bulk';
+            }
+        }
+
+        \Log::info('Intent extracted', ['body' => $body, 'intent' => $intent]);
+
+        return $intent;
     }
 
     // ─── Stage 2: DB search with keywords ────────────────────────────────────
@@ -215,15 +327,20 @@ bulk_items hanya diisi saat mode=bulk. unit default "buah" jika tidak disebutkan
                 'role'    => 'system',
                 'content' => "Kamu adalah asisten penjualan Toko Sentosa, toko grosir peralatan rumah tangga.
 
-Produk relevan tersedia:
+⚠️ PENTING: Gunakan HANYA daftar produk yang diberikan di bawah ini. Jangan gunakan informasi produk (harga, stok, satuan) dari percakapan sebelumnya karena data stok bisa berubah sewaktu-waktu. Data di bawah ini adalah data TERBARU dari database.
+
+=== DATA PRODUK TERBARU (dari database, diperbarui sekarang) ===
 {$productList}
+=== AKHIR DATA PRODUK ===
 
 Keranjang saat ini:
 {$cartSummary}
 
 Panduan:
+- Gunakan HANYA harga dan stok dari daftar produk di atas, bukan dari riwayat percakapan.
 - Cocokkan nama produk yang mirip jika tidak ada yang persis sama.
 - Jika pembeli mau memesan, tambahkan ke cart_add.
+- Jika pelanggan menggunakan kata 'tambah', 'pesan', 'mau', 'beli', 'order' diikuti nama produk dan jumlah, langsung tambahkan ke cart_add TANPA tanya konfirmasi lagi.
 - Tampilkan gambar (show_products) jika pembeli menanyakan atau ingin melihat produk tertentu.
 - Jawab singkat dan ramah dalam Bahasa Indonesia.
 
@@ -261,6 +378,39 @@ Balas dalam format JSON:
         return [$reply, $productsToShow, $cartAdd];
     }
 
+    // ─── Product search with fuzzy word-split fallback ───────────────────────
+
+    private function searchProduct(string $name): \Illuminate\Support\Collection
+    {
+        // Pass 1: exact phrase LIKE
+        $found = Product::where('stock', '>', 0)
+            ->where('product_name', 'like', '%' . $name . '%')
+            ->get();
+
+        if ($found->isNotEmpty()) {
+            return $found;
+        }
+
+        // Pass 2: split into individual words (≥3 chars) and OR-match
+        // Handles typos like "ayan" → still matches "Mangkok Ayam" via the word "mangkok"
+        $words = array_values(array_filter(
+            explode(' ', preg_replace('/\s+/', ' ', trim($name))),
+            fn ($w) => mb_strlen($w) >= 3
+        ));
+
+        if (empty($words)) {
+            return collect();
+        }
+
+        return Product::where('stock', '>', 0)
+            ->where(function ($q) use ($words) {
+                foreach ($words as $word) {
+                    $q->orWhere('product_name', 'like', '%' . $word . '%');
+                }
+            })
+            ->get();
+    }
+
     // ─── Bulk order mode ──────────────────────────────────────────────────────
 
     private function handleBulkOrder(array $bulkItems, WhatsAppSession $session): array
@@ -275,15 +425,27 @@ Balas dalam format JSON:
             $qty  = (float)($item['qty']  ?? 1);
             $unit = $item['unit'] ?? 'buah';
 
-            $found = Product::where('stock', '>', 0)
-                ->where('product_name', 'like', '%' . $name . '%')
-                ->get();
+            \Log::debug('WhatsApp bulk item extracted', ['name' => $name, 'qty' => $qty, 'unit' => $unit]);
+
+            $found = $this->searchProduct($name);
 
             if ($found->count() === 1) {
-                $product   = $found->first();
-                $cart      = $this->addToCart($cart, $product, $qty, $unit);
-                $matched[] = "✅ {$product->product_name} × {$qty} {$unit} — Rp"
-                           . number_format($product->sale_price * $qty, 0, ',', '.');
+                $product = $found->first();
+                [$convertedQty, $saleUnit, , $subtotal] = $this->convertUnit($qty, $unit, $product);
+                $cart = $this->addToCart($cart, $product, $qty, $unit, true); // replace, not accumulate
+
+                // Display uses customer's original unit/qty (same-unit) or converted (different-unit)
+                $customerUnitLower = strtolower(trim($unit));
+                $saleUnitLower     = strtolower(trim((string)($product->sale_unit ?? '')));
+                if ($customerUnitLower === $saleUnitLower || $saleUnitLower === '') {
+                    $displayQty  = $qty;
+                    $displayUnit = ucfirst($customerUnitLower);
+                } else {
+                    $displayQty  = (fmod($convertedQty, 1) === 0.0) ? (int)$convertedQty : $convertedQty;
+                    $displayUnit = ucfirst($saleUnitLower);
+                }
+                $matched[] = "✅ {$product->product_name} × {$displayQty} {$displayUnit} — Rp"
+                           . number_format($subtotal, 0, ',', '.');
             } elseif ($found->count() > 1) {
                 $options   = $found->take(3)->map(fn ($p) => "  • {$p->product_name}")->join("\n");
                 $clarify[] = "❓ *{$name}* ada beberapa pilihan:\n{$options}";
@@ -298,7 +460,7 @@ Balas dalam format JSON:
         $lines = ['📋 *Rekap Pesanan:*'];
 
         if (!empty($matched)) {
-            $lines[] = "\n\n*Berhasil ditambahkan:*\n" . implode("\n", $matched);
+            $lines[] = "\n\n*Baru ditambahkan:*\n" . implode("\n", $matched);
         }
         if (!empty($clarify)) {
             $lines[] = "\n\n*Perlu klarifikasi:*\n" . implode("\n\n", $clarify);
@@ -308,9 +470,16 @@ Balas dalam format JSON:
         }
 
         if (!empty($cart)) {
-            $total   = collect($cart)->sum('subtotal');
-            $lines[] = "\n\n💰 *Total sementara: Rp" . number_format($total, 0, ',', '.') . "*";
-            $lines[] = "\n\nKetik *selesai* untuk lihat ringkasan atau tambah produk lagi.";
+            $total     = collect($cart)->sum('subtotal');
+            $cartLines = collect($cart)->map(function ($i) {
+                $qty  = (fmod((float)$i['qty'], 1) === 0.0) ? (int)$i['qty'] : $i['qty'];
+                $unit = ucfirst(strtolower((string)($i['unit'] ?? '')));
+                return "• {$i['product_name']} × {$qty} {$unit} — Rp" . number_format($i['subtotal'], 0, ',', '.');
+            })->join("\n");
+
+            $lines[] = "\n\n🛒 *Semua item di keranjang:*\n{$cartLines}";
+            $lines[] = "\n\n💰 *Total: Rp" . number_format($total, 0, ',', '.') . "*";
+            $lines[] = "\nKetik *selesai* untuk konfirmasi atau tambah produk lagi.";
         }
 
         return [implode('', $lines), collect()];
@@ -375,7 +544,11 @@ Balas dalam format JSON:
         $total     = collect($cart)->sum('subtotal');
         $invoiceNo = str_pad($sale->sale_id, 6, '0', STR_PAD_LEFT);
         $itemList  = collect($cart)
-            ->map(fn ($i) => "- {$i['product_name']}: {$i['qty']} {$i['unit']}")
+            ->map(function ($i) {
+                $qty  = (fmod((float)$i['qty'], 1) === 0.0) ? (int)$i['qty'] : $i['qty'];
+                $unit = ucfirst(strtolower((string)($i['unit'] ?? '')));
+                return "- {$i['product_name']}: {$qty} {$unit}";
+            })
             ->join("\n");
 
         $session->cart = [];
@@ -394,14 +567,60 @@ Balas dalam format JSON:
         return [$reply, collect()];
     }
 
+    // ─── Unit conversion ──────────────────────────────────────────────────────
+
+    private const UNIT_TO_BASE = [
+        'buah'  => 1,
+        'pcs'   => 1,
+        'biji'  => 1,
+        'pak'   => 10,
+        'set'   => 6,
+        'lusin' => 12,
+        'kodi'  => 20,
+        'gross' => 144,
+    ];
+
+    /**
+     * Convert customer qty in their unit to product sale_unit qty and price.
+     * Returns [converted_qty, unit_used, price_per_unit, subtotal].
+     */
+    private function convertUnit(float $customerQty, string $customerUnit, Product $product): array
+    {
+        $customerUnitLower = strtolower(trim($customerUnit));
+        $saleUnitLower     = strtolower(trim((string)($product->sale_unit ?? '')));
+
+        // Same unit (or product has no sale_unit) → no conversion
+        if ($customerUnitLower === $saleUnitLower || $saleUnitLower === '') {
+            $subtotal = (float)$product->sale_price * $customerQty;
+            return [$customerQty, $product->sale_unit ?? $customerUnit, (float)$product->sale_price, $subtotal];
+        }
+
+        $customerBase = self::UNIT_TO_BASE[$customerUnitLower] ?? 1;
+        $productBase  = self::UNIT_TO_BASE[$saleUnitLower]     ?? 1;
+
+        // Customer qty → base units → product sale_unit qty
+        $convertedQty = ($customerQty * $customerBase) / $productBase;
+        $subtotal     = (float)$product->sale_price * $convertedQty;
+
+        return [$convertedQty, $product->sale_unit, (float)$product->sale_price, $subtotal];
+    }
+
     // ─── Cart helper ──────────────────────────────────────────────────────────
 
-    private function addToCart(array $cart, Product $product, float $qty, string $unit): array
+    private function addToCart(array $cart, Product $product, float $qty, string $unit, bool $replace = false): array
     {
+        [$convertedQty, $saleUnit, $price, $subtotal] = $this->convertUnit($qty, $unit, $product);
+
         foreach ($cart as &$item) {
             if ($item['product_id'] === $product->id) {
-                $item['qty']     += $qty;
-                $item['subtotal'] = $item['price'] * $item['qty'];
+                if ($replace) {
+                    $item['qty'] = $convertedQty;
+                } else {
+                    $item['qty'] += $convertedQty;
+                }
+                $item['unit']     = $saleUnit;
+                $item['price']    = $price;
+                $item['subtotal'] = $price * $item['qty'];
                 return $cart;
             }
         }
@@ -409,10 +628,10 @@ Balas dalam format JSON:
         $cart[] = [
             'product_id'   => $product->id,
             'product_name' => $product->product_name,
-            'qty'          => $qty,
-            'unit'         => $unit ?: $product->sale_unit,
-            'price'        => (float)$product->sale_price,
-            'subtotal'     => (float)$product->sale_price * $qty,
+            'qty'          => $convertedQty,
+            'unit'         => $saleUnit,
+            'price'        => $price,
+            'subtotal'     => $subtotal,
         ];
 
         return $cart;
@@ -422,7 +641,11 @@ Balas dalam format JSON:
     {
         $total    = collect($cart)->sum('subtotal');
         $itemList = collect($cart)
-            ->map(fn ($i) => "- {$i['product_name']}: {$i['qty']} {$i['unit']} — Rp" . number_format($i['subtotal'], 0, ',', '.'))
+            ->map(function ($i) {
+                $qty  = (fmod((float)$i['qty'], 1) === 0.0) ? (int)$i['qty'] : $i['qty'];
+                $unit = ucfirst(strtolower((string)($i['unit'] ?? '')));
+                return "- {$i['product_name']}: {$qty} {$unit} — Rp" . number_format($i['subtotal'], 0, ',', '.');
+            })
             ->join("\n");
 
         return "🛒 *Ringkasan Pesanan:*\n{$itemList}\n\n💰 *Total: Rp" . number_format($total, 0, ',', '.') . "*";

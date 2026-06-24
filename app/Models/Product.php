@@ -9,14 +9,15 @@ class Product extends Model
     protected $fillable = [
         'product_name',
         'brand',
-        'image',              // ✅ tambah ini
+        'image',
         'default_buy_price',
         'default_buy_discount',
         'sale_price',
         'sale_unit',
+        'units_per_sale_unit',
         'purchase_unit',
         'dus_to_unit',
-        'stock'
+        'stock',
     ];
 
     public function purchaseOrderDetails()

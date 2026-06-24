@@ -89,6 +89,13 @@
                         </div>
 
                         <div>
+                            <x-input-label for="units_per_sale_unit" :value="__('Jumlah per Unit Jual')" />
+                            <x-text-input id="units_per_sale_unit" name="units_per_sale_unit" type="number" min="1" class="mt-1 block w-full" value="{{ old('units_per_sale_unit', $product->units_per_sale_unit) }}" required />
+                            <p class="text-xs text-gray-500 mt-1">Contoh: jika satuan jual = lusin, isi 12. Jika satuan jual = buah, isi 1.</p>
+                            <x-input-error :messages="$errors->get('units_per_sale_unit')" class="mt-2" />
+                        </div>
+
+                        <div>
                             <x-input-label for="purchase_unit" :value="__('Purchase Unit')" />
                             <x-text-input id="purchase_unit" name="purchase_unit" type="text" class="mt-1 block w-full" value="{{ old('purchase_unit', $product->purchase_unit) }}" required />
                             <x-input-error :messages="$errors->get('purchase_unit')" class="mt-2" />

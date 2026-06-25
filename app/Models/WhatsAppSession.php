@@ -13,14 +13,17 @@ class WhatsAppSession extends Model
         'step',
         'cart',
         'messages',
+        'pending_clarification',
         'customer_name',
         'address',
+        'payment_method',
         'last_activity',
     ];
 
     protected $casts = [
-        'cart'          => 'array',
-        'messages'      => 'array',
-        'last_activity' => 'datetime',
+        'cart'                  => 'array',
+        'messages'              => 'array',
+        'pending_clarification' => 'array',
+        'last_activity'         => 'datetime',
     ];
 }

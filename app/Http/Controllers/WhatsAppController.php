@@ -58,19 +58,43 @@ class WhatsAppController extends Controller
                     $session->customer_name = trim($body);
                     $session->step          = 'need_address';
                     $session->save();
-                    $reply   = "Terima kasih, *{$session->customer_name}*! Sekarang tolong berikan alamat pengiriman Anda.";
+                    $reply   = "Terima kasih, *{$session->customer_name}*! Sekarang tolong berikan alamat pengiriman Anda.\n_(Ketik *ambil sendiri* jika akan mengambil langsung ke toko)_";
                     $handled = true;
                 }
             }
 
             // ── Priority 1b: collecting address ───────────────────────────────────
             if (!$handled && $session->step === 'need_address') {
-                if ($this->isLikelyNonInput($body)) {
+                if ($this->isPickup($body)) {
+                    $session->address = 'Ambil Sendiri di Toko';
+                    $session->step    = 'need_payment';
+                    $session->save();
+                    $reply   = $this->paymentPrompt();
+                    $handled = true;
+                } elseif ($this->isLikelyNonInput($body)) {
                     // Looks like a question/command — fall through to intent detection
                 } else {
                     $session->address = trim($body);
+                    $session->step    = 'need_payment';
+                    $session->save();
+                    $reply   = $this->paymentPrompt();
+                    $handled = true;
+                }
+            }
+
+            // ── Priority 1b.5: collecting payment method ──────────────────────────
+            if (!$handled && $session->step === 'need_payment') {
+                $paymentMethod = $this->parsePaymentMethod($body);
+                if ($paymentMethod !== null) {
+                    $session->payment_method = $paymentMethod;
                     $session->save();
                     [$reply, $productsToShow] = $this->createOrder($session);
+                    $handled = true;
+                } elseif ($this->isLikelyNonInput($body)) {
+                    // Question/command — fall through to intent detection
+                } else {
+                    // Unrecognised input — re-prompt
+                    $reply   = "Maaf, pilihan tidak dikenali.\n\n" . $this->paymentPrompt();
                     $handled = true;
                 }
             }
@@ -85,7 +109,11 @@ class WhatsAppController extends Controller
                     } elseif (empty($session->address)) {
                         $session->step = 'need_address';
                         $session->save();
-                        $reply = "Boleh minta alamat pengirimannya, *{$session->customer_name}*?";
+                        $reply = "Boleh minta alamat pengirimannya, *{$session->customer_name}*?\n_(Ketik *ambil sendiri* jika akan mengambil langsung ke toko)_";
+                    } elseif (empty($session->payment_method)) {
+                        $session->step = 'need_payment';
+                        $session->save();
+                        $reply = $this->paymentPrompt();
                     } else {
                         [$reply, $productsToShow] = $this->createOrder($session);
                     }
@@ -93,6 +121,11 @@ class WhatsAppController extends Controller
                 }
                 // Not a confirmation — fall through to intent detection
                 // (allows customer to ask questions or add more items)
+            }
+
+            // ── Priority 1d: resolve pending clarification ────────────────────────
+            if (!$handled && !empty($session->pending_clarification)) {
+                [$handled, $reply] = $this->resolveClarification($body, $session);
             }
 
             // ── Priority 2: intent-based routing ─────────────────────────────────
@@ -145,7 +178,7 @@ class WhatsAppController extends Controller
 
                     $session->cart     = $cart;
                     $session->messages = $history;
-                    if (!in_array($session->step, ['confirm_order', 'need_name', 'need_address'])) {
+                    if (!in_array($session->step, ['confirm_order', 'need_name', 'need_address', 'need_payment'])) {
                         $session->step = 'chat';
                     }
                     $session->save();
@@ -203,9 +236,25 @@ class WhatsAppController extends Controller
 
     private function isLikelyCartQuery(string $body): bool
     {
+        // Never intercept bulk orders (2+ comma/newline parts that each have a number + letters)
+        $parts    = preg_split('/[,\n]+/', $body);
+        $itemLike = array_filter($parts, fn ($p) => preg_match('/\d/', $p) && preg_match('/[a-zA-Z]/u', $p));
+        if (count($itemLike) >= 2) {
+            return false;
+        }
+
         $lower = strtolower($body);
-        foreach (['total', 'berapa', 'lihat', 'keranjang', 'ringkasan', 'summary', 'cart'] as $kw) {
+        // "keranjang" excluded — it's also a common product name (keranjang sampah, keranjang plastik)
+        // Only match explicit cart-view phrases or clear financial queries
+        foreach (['total belanja', 'lihat keranjang', 'cek keranjang', 'isi keranjang',
+                  'ringkasan', 'summary', 'cart', 'total saya', 'total ku'] as $kw) {
             if (str_contains($lower, $kw)) return true;
+        }
+        // Single-word triggers only safe when message is short (no product list)
+        if (strlen(trim($body)) <= 30) {
+            foreach (['total', 'berapa', 'lihat'] as $kw) {
+                if (str_contains($lower, $kw)) return true;
+            }
         }
         return false;
     }
@@ -230,6 +279,37 @@ class WhatsAppController extends Controller
     {
         $lower = strtolower(trim($body));
         return in_array($lower, ['ya', 'iya', 'ok', 'oke', 'okay', 'setuju', 'yes', 'yep', 'yap', 'confirm']);
+    }
+
+    private function paymentPrompt(): string
+    {
+        return "Pembayaran dilakukan dengan cara apa?\n\n"
+             . "1️⃣ Transfer Bank\n"
+             . "2️⃣ Bayar di Toko (COD)\n\n"
+             . "Balas dengan angka *1* atau *2*";
+    }
+
+    private function parsePaymentMethod(string $body): ?string
+    {
+        $lower = strtolower(trim($body));
+        $transfer = ['1', 'transfer', 'transfer bank', 'bank', 'bca', 'bni', 'bri', 'mandiri'];
+        $cod      = ['2', 'cod', 'cash', 'tunai', 'bayar di toko', 'bayar toko', 'bayar langsung', 'cash on delivery'];
+        if (in_array($lower, $transfer)) return 'Transfer Bank';
+        if (in_array($lower, $cod))      return 'Bayar di Toko';
+        foreach ($transfer as $kw) { if (str_contains($lower, $kw)) return 'Transfer Bank'; }
+        foreach ($cod      as $kw) { if (str_contains($lower, $kw)) return 'Bayar di Toko'; }
+        return null;
+    }
+
+    private function isPickup(string $body): bool
+    {
+        $lower = strtolower(trim($body));
+        $phrases = ['ambil sendiri', 'ambil langsung', 'datang sendiri', 'pickup', 'pick up',
+                    'jemput sendiri', 'ambil di toko', 'ke toko', 'self pickup'];
+        foreach ($phrases as $phrase) {
+            if (str_contains($lower, $phrase)) return true;
+        }
+        return false;
     }
 
     // ─── Stage 1: intent + keyword extraction (no product list needed) ────────
@@ -342,6 +422,7 @@ Panduan:
 - Jika pembeli mau memesan, tambahkan ke cart_add.
 - Jika pelanggan menggunakan kata 'tambah', 'pesan', 'mau', 'beli', 'order' diikuti nama produk dan jumlah, langsung tambahkan ke cart_add TANPA tanya konfirmasi lagi.
 - Tampilkan gambar (show_products) jika pembeli menanyakan atau ingin melihat produk tertentu.
+- Jika pelanggan bertanya produk apa saja yang tersedia (contoh: ada apa, ada barang apa, produk apa saja, ada apa lagi), WAJIB: (1) sebutkan SEMUA produk dalam field reply beserta nama, harga, dan satuan dalam format daftar, (2) isi show_products dengan maksimal 3 produk yang paling relevan. JANGAN hanya menulis kalimat pembuka seperti \'Berikut produk kami:\' tanpa melanjutkan daftarnya.
 - Jawab singkat dan ramah dalam Bahasa Indonesia.
 
 Balas dalam format JSON:
@@ -411,6 +492,109 @@ Balas dalam format JSON:
             ->get();
     }
 
+    // ─── Clarification resolver ───────────────────────────────────────────────
+
+    private function resolveClarification(string $body, WhatsAppSession $session): array
+    {
+        $pending   = $session->pending_clarification ?? [];
+        $cart      = $session->cart ?? [];
+        $added     = [];
+        $stillPending = [];
+
+        $lowerBody = strtolower(trim($body));
+
+        // Ignore pure stop-words so "yang kecil" → keywords = ["kecil"]
+        $stopWords = ['yang', 'mau', 'itu', 'ini', 'saja', 'deh', 'dong', 'kak', 'pak', 'bu'];
+        $keywords  = array_values(array_filter(
+            explode(' ', preg_replace('/[^a-zA-Z0-9\s]/u', ' ', $lowerBody)),
+            fn ($w) => mb_strlen($w) >= 3 && !in_array($w, $stopWords)
+        ));
+
+        // Check if customer typed a position number: "1", "2", "yang pertama", etc.
+        preg_match('/\b([1-9])\b/', $body, $numMatch);
+        $pickedIndex = isset($numMatch[1]) ? ((int)$numMatch[1] - 1) : null;
+
+        foreach ($pending as $item) {
+            $options = $item['options']; // [['id' => X, 'name' => 'Y'], ...]
+
+            // Number pick takes priority
+            if ($pickedIndex !== null && isset($options[$pickedIndex])) {
+                $opt     = $options[$pickedIndex];
+                $product = Product::where('id', $opt['id'])->where('stock', '>', 0)->first();
+                if ($product) {
+                    $cart  = $this->addToCart($cart, $product, $item['qty'], $item['unit'], true);
+                    $added[] = $product->product_name;
+                }
+                continue;
+            }
+
+            // Keyword matching — score each option by how many keywords appear in its name
+            $scores = [];
+            foreach ($options as $idx => $opt) {
+                $optLower = strtolower($opt['name']);
+                $score    = 0;
+                foreach ($keywords as $kw) {
+                    if (str_contains($optLower, $kw)) {
+                        $score++;
+                    }
+                }
+                if ($score > 0) {
+                    $scores[$idx] = $score;
+                }
+            }
+
+            if (!empty($scores)) {
+                arsort($scores);
+                $topScore   = reset($scores);
+                $topMatches = array_keys(array_filter($scores, fn ($s) => $s === $topScore));
+
+                if (count($topMatches) === 1) {
+                    $opt     = $options[$topMatches[0]];
+                    $product = Product::where('id', $opt['id'])->where('stock', '>', 0)->first();
+                    if ($product) {
+                        $cart  = $this->addToCart($cart, $product, $item['qty'], $item['unit'], true);
+                        $added[] = $product->product_name;
+                    }
+                } else {
+                    $stillPending[] = $item; // still ambiguous after reply
+                }
+            } else {
+                $stillPending[] = $item; // no keyword matched — keep pending
+            }
+        }
+
+        if (empty($added)) {
+            // Nothing resolved — let normal intent detection handle this message
+            return [false, ''];
+        }
+
+        $session->cart                  = $cart;
+        $session->pending_clarification = empty($stillPending) ? null : array_values($stillPending);
+        $session->save();
+
+        $total     = collect($cart)->sum('subtotal');
+        $cartLines = collect($cart)->map(function ($i) {
+            $qty  = (fmod((float)$i['qty'], 1) === 0.0) ? (int)$i['qty'] : $i['qty'];
+            $unit = ucfirst(strtolower((string)($i['unit'] ?? '')));
+            return "• {$i['product_name']} × {$qty} {$unit} — Rp" . number_format($i['subtotal'], 0, ',', '.');
+        })->join("\n");
+
+        $reply  = "✅ Ditambahkan: *" . implode(', ', $added) . "*";
+        $reply .= "\n\n🛒 *Semua item di keranjang:*\n{$cartLines}";
+        $reply .= "\n\n💰 *Total: Rp" . number_format($total, 0, ',', '.') . "*";
+
+        if (!empty($stillPending)) {
+            foreach ($stillPending as $item) {
+                $opts   = collect($item['options'])->map(fn ($o) => "  • {$o['name']}")->join("\n");
+                $reply .= "\n\n❓ *{$item['original']}* masih perlu diperjelas:\n{$opts}";
+            }
+        } else {
+            $reply .= "\n\nKetik *selesai* untuk konfirmasi atau tambah produk lagi.";
+        }
+
+        return [true, $reply];
+    }
+
     // ─── Bulk order mode ──────────────────────────────────────────────────────
 
     private function handleBulkOrder(array $bulkItems, WhatsAppSession $session): array
@@ -419,6 +603,8 @@ Balas dalam format JSON:
         $matched  = [];
         $clarify  = [];
         $notFound = [];
+
+        $pending = [];
 
         foreach ($bulkItems as $item) {
             $name = $item['item'] ?? '';
@@ -446,15 +632,27 @@ Balas dalam format JSON:
                 }
                 $matched[] = "✅ {$product->product_name} × {$displayQty} {$displayUnit} — Rp"
                            . number_format($subtotal, 0, ',', '.');
+
             } elseif ($found->count() > 1) {
-                $options   = $found->take(3)->map(fn ($p) => "  • {$p->product_name}")->join("\n");
-                $clarify[] = "❓ *{$name}* ada beberapa pilihan:\n{$options}";
+                $options = $found->take(3)
+                    ->map(fn ($p) => ['id' => $p->id, 'name' => $p->product_name])
+                    ->values()->all();
+                $optText   = collect($options)->map(fn ($o) => "  • {$o['name']}")->join("\n");
+                $clarify[] = "❓ *{$name}* ada beberapa pilihan:\n{$optText}\nBalas dengan pilihan Anda (contoh: \"yang kecil\", \"yang besar\", atau \"1\"/\"2\")";
+
+                $pending[] = [
+                    'original' => $name,
+                    'options'  => $options,
+                    'qty'      => $qty,
+                    'unit'     => $unit,
+                ];
             } else {
                 $notFound[] = "❌ {$name} — tidak ditemukan";
             }
         }
 
-        $session->cart = $cart;
+        $session->cart                 = $cart;
+        $session->pending_clarification = !empty($pending) ? $pending : null;
         $session->save();
 
         $lines = ['📋 *Rekap Pesanan:*'];
@@ -518,7 +716,7 @@ Balas dalam format JSON:
                 'customer_id'    => $customer->id,
                 'user_id'        => 1,
                 'sale_date'      => now()->toDateString(),
-                'payment_method' => 'Tunai',
+                'payment_method' => $session->payment_method ?? 'Tunai',
                 'payment_status' => 'Belum Bayar',
                 'total_amount'   => $total,
                 'is_new'         => true,
@@ -555,14 +753,25 @@ Balas dalam format JSON:
         $session->step = 'chat';
         $session->save();
 
+        $transferInfo = '';
+        if (($session->payment_method ?? '') === 'Transfer Bank') {
+            $transferInfo = "\n\n💳 *Silakan transfer ke:*\n"
+                          . "🏦 Bank BCA\n"
+                          . "📋 No. Rekening: *1234567890*\n"
+                          . "👤 Atas Nama: *Toko Sentosa*\n\n"
+                          . "Konfirmasi pembayaran dengan kirim bukti transfer ke nomor ini.";
+        }
+
         $reply = "✅ *Pesanan Berhasil Dibuat!*\n\n"
                . "🧾 No. Invoice: *INV-{$invoiceNo}*\n"
                . "👤 Nama: {$session->customer_name}\n"
-               . "📍 Alamat: {$session->address}\n\n"
+               . "📍 Alamat: {$session->address}\n"
+               . "💳 Pembayaran: {$session->payment_method}\n\n"
                . "*Produk:*\n{$itemList}\n\n"
                . "💰 *Total: Rp" . number_format($total, 0, ',', '.') . "*\n"
-               . "💳 Status: Belum Bayar\n\n"
-               . "Terima kasih sudah berbelanja di Toko Sentosa! 🙏";
+               . "📋 Status: Belum Bayar"
+               . $transferInfo
+               . "\n\nTerima kasih sudah berbelanja di Toko Sentosa! 🙏";
 
         return [$reply, collect()];
     }

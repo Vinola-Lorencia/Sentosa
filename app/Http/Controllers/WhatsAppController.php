@@ -4,6 +4,9 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 use Twilio\Rest\Client;
 use OpenAI\Laravel\Facades\OpenAI;
 use App\Models\Customer;
@@ -21,8 +24,11 @@ class WhatsAppController extends Controller
 
     public function handle(Request $request): \Illuminate\Http\Response
     {
-        $from = $request->input('From');
-        $body = $request->input('Body');
+        [$from, $body] = $this->parseIncoming($request);
+
+        if ($from === null) {
+            return response('', 200);
+        }
 
         $session = WhatsAppSession::firstOrCreate(
             ['phone_number' => $from],
@@ -226,13 +232,49 @@ class WhatsAppController extends Controller
                 }
             }
         } catch (\Throwable $e) {
-            \Log::error('Twilio send failed: ' . $e->getMessage(), ['to' => $from]);
+            \Log::error('WhatsApp send failed: ' . $e->getMessage(), ['to' => $from]);
         }
 
         return response('', 200);
     }
 
     // ─── Conversation guard helpers ───────────────────────────────────────────
+
+    private function transcribeVoiceNote(string $mediaUrl): ?string
+    {
+        try {
+            Storage::makeDirectory('temp');
+            $tempPath = storage_path('app/temp/voice_' . uniqid() . '.ogg');
+
+            $response = Http::withBasicAuth(
+                config('services.twilio.sid'),
+                config('services.twilio.token')
+            )->get($mediaUrl);
+
+            if (!$response->successful()) {
+                Log::error('Voice note download failed', ['url' => $mediaUrl, 'status' => $response->status()]);
+                return null;
+            }
+
+            file_put_contents($tempPath, $response->body());
+
+            $result = OpenAI::audio()->transcribe([
+                'model'    => 'whisper-1',
+                'file'     => fopen($tempPath, 'r'),
+                'language' => 'id',
+            ]);
+
+            @unlink($tempPath);
+
+            return trim($result->text);
+        } catch (\Throwable $e) {
+            Log::error('Whisper transcription failed', ['error' => $e->getMessage()]);
+            if (isset($tempPath) && file_exists($tempPath)) {
+                @unlink($tempPath);
+            }
+            return null;
+        }
+    }
 
     private function isLikelyCartQuery(string $body): bool
     {
@@ -373,7 +415,21 @@ Panduan mode:
             return Product::where('stock', '>', 0)->get();
         }
 
-        $results = Product::where('stock', '>', 0)
+        // Pass 1: AND — product must contain ALL keywords (strictest)
+        $andResults = Product::where('stock', '>', 0)
+            ->where(function ($q) use ($keywords) {
+                foreach ($keywords as $kw) {
+                    $q->where('product_name', 'like', '%' . $kw . '%');
+                }
+            })
+            ->get();
+
+        if ($andResults->isNotEmpty()) {
+            return $andResults;
+        }
+
+        // Pass 2: OR — product contains ANY keyword
+        $orResults = Product::where('stock', '>', 0)
             ->where(function ($q) use ($keywords) {
                 foreach ($keywords as $kw) {
                     $q->orWhere('product_name', 'like', '%' . $kw . '%');
@@ -381,10 +437,10 @@ Panduan mode:
             })
             ->get();
 
-        // Fall back to full catalog if no keyword matches
-        return $results->isEmpty()
+        // Fall back to full catalog only if nothing matched at all
+        return $orResults->isEmpty()
             ? Product::where('stock', '>', 0)->get()
-            : $results;
+            : $orResults;
     }
 
     // ─── Stage 3: GPT reply with only the relevant product subset ────────────
@@ -422,7 +478,7 @@ Panduan:
 - Jika pembeli mau memesan, tambahkan ke cart_add.
 - Jika pelanggan menggunakan kata 'tambah', 'pesan', 'mau', 'beli', 'order' diikuti nama produk dan jumlah, langsung tambahkan ke cart_add TANPA tanya konfirmasi lagi.
 - Tampilkan gambar (show_products) jika pembeli menanyakan atau ingin melihat produk tertentu.
-- Jika pelanggan bertanya produk apa saja yang tersedia (contoh: ada apa, ada barang apa, produk apa saja, ada apa lagi), WAJIB: (1) sebutkan SEMUA produk dalam field reply beserta nama, harga, dan satuan dalam format daftar, (2) isi show_products dengan maksimal 3 produk yang paling relevan. JANGAN hanya menulis kalimat pembuka seperti \'Berikut produk kami:\' tanpa melanjutkan daftarnya.
+- Jika pelanggan bertanya produk apa saja yang tersedia (contoh: ada apa, ada barang apa, produk apa saja, ada apa lagi), tampilkan MAKSIMAL 10 produk saja dalam format singkat satu baris: \`- Nama Produk - Rp harga/satuan\`, lalu tambahkan catatan (ketik nama produk untuk info lebih detail). JANGAN tampilkan semua produk sekaligus karena akan terlalu panjang.
 - Jawab singkat dan ramah dalam Bahasa Indonesia.
 
 Balas dalam format JSON:
@@ -472,8 +528,6 @@ Balas dalam format JSON:
             return $found;
         }
 
-        // Pass 2: split into individual words (≥3 chars) and OR-match
-        // Handles typos like "ayan" → still matches "Mangkok Ayam" via the word "mangkok"
         $words = array_values(array_filter(
             explode(' ', preg_replace('/\s+/', ' ', trim($name))),
             fn ($w) => mb_strlen($w) >= 3
@@ -483,6 +537,20 @@ Balas dalam format JSON:
             return collect();
         }
 
+        // Pass 2: AND — product must contain ALL words
+        $andFound = Product::where('stock', '>', 0)
+            ->where(function ($q) use ($words) {
+                foreach ($words as $word) {
+                    $q->where('product_name', 'like', '%' . $word . '%');
+                }
+            })
+            ->get();
+
+        if ($andFound->isNotEmpty()) {
+            return $andFound;
+        }
+
+        // Pass 3: OR fallback — handles typos/partial names
         return Product::where('stock', '>', 0)
             ->where(function ($q) use ($words) {
                 foreach ($words as $word) {
@@ -860,21 +928,194 @@ Balas dalam format JSON:
         return "🛒 *Ringkasan Pesanan:*\n{$itemList}\n\n💰 *Total: Rp" . number_format($total, 0, ',', '.') . "*";
     }
 
-    // ─── Twilio ───────────────────────────────────────────────────────────────
+    // ─── Send helpers ─────────────────────────────────────────────────────────
 
     private function sendMessage(string $to, string $body, ?string $mediaUrl = null): void
     {
-        $twilio = new Client(env('TWILIO_SID'), env('TWILIO_TOKEN'));
+        if (env('WHATSAPP_PROVIDER', 'twilio') === 'meta') {
+            $this->sendViaMeta($to, $body, $mediaUrl);
+        } else {
+            $this->sendViaTwilio($to, $body, $mediaUrl);
+        }
+    }
 
-        $params = [
-            'from' => env('TWILIO_WHATSAPP_FROM'),
-            'body' => $body,
-        ];
+    private function sendViaTwilio(string $to, string $body, ?string $mediaUrl = null): void
+    {
+        $twilio = new Client(env('TWILIO_SID'), env('TWILIO_TOKEN'));
+        $from   = env('TWILIO_WHATSAPP_FROM');
+
+        // Split long messages at newlines to stay under Twilio's 1600-char limit
+        if (strlen($body) > 1500 && !$mediaUrl) {
+            foreach ($this->splitMessage($body) as $chunk) {
+                $twilio->messages->create($to, ['from' => $from, 'body' => $chunk]);
+            }
+            return;
+        }
+
+        $params = ['from' => $from, 'body' => $body];
 
         if ($mediaUrl) {
             $params['mediaUrl'] = [$mediaUrl];
         }
 
         $twilio->messages->create($to, $params);
+    }
+
+    private function splitMessage(string $body, int $limit = 1500): array
+    {
+        $lines  = explode("\n", $body);
+        $chunks = [];
+        $current = '';
+
+        foreach ($lines as $line) {
+            $candidate = $current === '' ? $line : $current . "\n" . $line;
+
+            if (strlen($candidate) > $limit) {
+                if ($current !== '') {
+                    $chunks[]  = $current;
+                }
+                // Single line longer than limit — hard-cut it
+                $current = strlen($line) > $limit
+                    ? substr($line, 0, $limit)
+                    : $line;
+            } else {
+                $current = $candidate;
+            }
+        }
+
+        if ($current !== '') {
+            $chunks[] = $current;
+        }
+
+        return $chunks ?: [$body];
+    }
+
+    private function sendViaMeta(string $to, string $body, ?string $mediaUrl = null): void
+    {
+        $phone         = preg_replace('/^whatsapp:\+?/', '', $to);
+        $phoneNumberId = env('META_PHONE_NUMBER_ID');
+        $accessToken   = env('META_ACCESS_TOKEN');
+
+        $payload = [
+            'messaging_product' => 'whatsapp',
+            'recipient_type'    => 'individual',
+            'to'                => $phone,
+        ];
+
+        if ($mediaUrl) {
+            $payload['type']  = 'image';
+            $payload['image'] = ['link' => $mediaUrl, 'caption' => $body];
+        } else {
+            $payload['type'] = 'text';
+            $payload['text'] = ['body' => $body];
+        }
+
+        Http::withToken($accessToken)
+            ->post("https://graph.facebook.com/v18.0/{$phoneNumberId}/messages", $payload);
+    }
+
+    // ─── Incoming message parsers ─────────────────────────────────────────────
+
+    private function parseIncoming(Request $request): array
+    {
+        if ($request->input('object') === 'whatsapp_business_account') {
+            return $this->parseMetaIncoming($request);
+        }
+        return $this->parseTwilioIncoming($request);
+    }
+
+    private function parseTwilioIncoming(Request $request): array
+    {
+        $from      = $request->input('From');
+        $body      = $request->input('Body', '');
+        $mediaUrl  = $request->input('MediaUrl0');
+        $mediaType = $request->input('MediaContentType0', '');
+
+        if ($mediaUrl && (str_contains($mediaType, 'audio') || str_contains($mediaType, 'ogg'))) {
+            $transcribed = $this->transcribeVoiceNote($mediaUrl);
+
+            if ($transcribed === null) {
+                $this->sendMessage($from, 'Maaf, kami tidak dapat memproses pesan suara Anda. Silakan kirim pesan teks.');
+                return [null, ''];
+            }
+
+            Log::info('[Voice Note] Transcribed', ['from' => $from, 'text' => $transcribed]);
+            $body = '[Voice Note] ' . $transcribed;
+        }
+
+        return [$from, $body];
+    }
+
+    private function parseMetaIncoming(Request $request): array
+    {
+        $value   = $request->input('entry.0.changes.0.value', []);
+        $message = data_get($value, 'messages.0');
+
+        if (!$message) {
+            return [null, ''];
+        }
+
+        $from = 'whatsapp:+' . $message['from'];
+        $type = $message['type'] ?? 'text';
+        $body = '';
+
+        if ($type === 'text') {
+            $body = data_get($message, 'text.body', '');
+        } elseif ($type === 'audio') {
+            $mediaId     = data_get($message, 'audio.id');
+            $transcribed = $mediaId ? $this->transcribeMetaVoiceNote($mediaId) : null;
+
+            if ($transcribed === null) {
+                $this->sendMessage($from, 'Maaf, kami tidak dapat memproses pesan suara Anda. Silakan kirim pesan teks.');
+                return [null, ''];
+            }
+
+            Log::info('[Voice Note Meta] Transcribed', ['from' => $from, 'text' => $transcribed]);
+            $body = '[Voice Note] ' . $transcribed;
+        }
+
+        return [$from, $body];
+    }
+
+    private function transcribeMetaVoiceNote(string $mediaId): ?string
+    {
+        try {
+            Storage::makeDirectory('temp');
+            $tempPath    = storage_path('app/temp/voice_' . uniqid() . '.ogg');
+            $accessToken = env('META_ACCESS_TOKEN');
+
+            $urlResponse = Http::withToken($accessToken)
+                ->get("https://graph.facebook.com/v18.0/{$mediaId}");
+
+            if (!$urlResponse->successful()) {
+                Log::error('Meta media URL fetch failed', ['media_id' => $mediaId]);
+                return null;
+            }
+
+            $audioResponse = Http::withToken($accessToken)->get($urlResponse->json('url'));
+
+            if (!$audioResponse->successful()) {
+                Log::error('Meta audio download failed', ['media_id' => $mediaId]);
+                return null;
+            }
+
+            file_put_contents($tempPath, $audioResponse->body());
+
+            $result = OpenAI::audio()->transcribe([
+                'model'    => 'whisper-1',
+                'file'     => fopen($tempPath, 'r'),
+                'language' => 'id',
+            ]);
+
+            @unlink($tempPath);
+            return trim($result->text);
+
+        } catch (\Throwable $e) {
+            Log::error('Meta Whisper transcription failed', ['error' => $e->getMessage()]);
+            if (isset($tempPath) && file_exists($tempPath)) {
+                @unlink($tempPath);
+            }
+            return null;
+        }
     }
 }

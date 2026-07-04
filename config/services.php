@@ -35,4 +35,15 @@ return [
         ],
     ],
 
+    'twilio' => [
+        'sid'   => env('TWILIO_SID'),
+        'token' => env('TWILIO_TOKEN'),
+    ],
+
+    'meta' => [
+        'phone_number_id' => env('META_PHONE_NUMBER_ID'),
+        'access_token'    => env('META_ACCESS_TOKEN'),
+        'verify_token'    => env('META_VERIFY_TOKEN'),
+    ],
+
 ];

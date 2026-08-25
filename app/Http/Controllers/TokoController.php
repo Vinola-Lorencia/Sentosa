@@ -21,7 +21,7 @@ class TokoController extends Controller
         $search = $request->search;
 
         $products = Product::where('stock', '>', 0)
-            ->when($search, fn($q) => $q->where('product_name', 'like', "%$search%"))
+            ->when($search, fn($q) => $q->whereRaw('LOWER(product_name) LIKE ?', ['%' . strtolower($search) . '%']))
             ->orderBy('product_name')
             ->paginate(12);
 

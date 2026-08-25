@@ -8,6 +8,18 @@
     <div class="py-4 sm:py-8">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-4 sm:space-y-6">
 
+            @if(session('error'))
+                <div class="px-4 py-3 bg-red-100 border border-red-300 text-red-800 rounded-md text-sm font-medium">
+                    ⚠ {{ session('error') }}
+                </div>
+            @endif
+
+            @if(session('success'))
+                <div class="px-4 py-3 bg-green-100 border border-green-300 text-green-800 rounded-md text-sm font-medium">
+                    ✓ {{ session('success') }}
+                </div>
+            @endif
+
             {{-- Notifikasi Pesanan Baru --}}
             @if($pesananBaru->count() > 0)
                 <div class="bg-yellow-50 border border-yellow-300 rounded-lg p-4">

@@ -14,6 +14,7 @@ use App\Models\Product;
 use App\Models\Sale;
 use App\Models\SaleDetail;
 use App\Models\WhatsAppSession;
+use App\Services\UnitConverter;
 
 class WhatsAppController extends Controller
 {
@@ -171,7 +172,7 @@ class WhatsAppController extends Controller
                     $cart = $session->cart ?? [];
                     foreach ($cartAdd as $item) {
                         $product = Product::where('stock', '>', 0)
-                            ->where('product_name', 'like', '%' . ($item['product_name'] ?? '') . '%')
+                            ->whereRaw('LOWER(product_name) LIKE ?', ['%' . strtolower($item['product_name'] ?? '') . '%'])
                             ->first();
                         if ($product) {
                             $cart = $this->addToCart($cart, $product, (float)($item['qty'] ?? 1), $item['unit'] ?? $product->sale_unit);
@@ -419,7 +420,7 @@ Panduan mode:
         $andResults = Product::where('stock', '>', 0)
             ->where(function ($q) use ($keywords) {
                 foreach ($keywords as $kw) {
-                    $q->where('product_name', 'like', '%' . $kw . '%');
+                    $q->whereRaw('LOWER(product_name) LIKE ?', ['%' . strtolower($kw) . '%']);
                 }
             })
             ->get();
@@ -432,7 +433,7 @@ Panduan mode:
         $orResults = Product::where('stock', '>', 0)
             ->where(function ($q) use ($keywords) {
                 foreach ($keywords as $kw) {
-                    $q->orWhere('product_name', 'like', '%' . $kw . '%');
+                    $q->orWhereRaw('LOWER(product_name) LIKE ?', ['%' . strtolower($kw) . '%']);
                 }
             })
             ->get();
@@ -508,7 +509,7 @@ Balas dalam format JSON:
         $productsToShow = collect($showNames)
             ->take(self::MAX_IMAGES)
             ->map(fn ($name) => Product::where('stock', '>', 0)
-                ->where('product_name', 'like', '%' . $name . '%')
+                ->whereRaw('LOWER(product_name) LIKE ?', ['%' . strtolower($name) . '%'])
                 ->first())
             ->filter(fn ($p) => $p && $p->image);
 
@@ -521,7 +522,7 @@ Balas dalam format JSON:
     {
         // Pass 1: exact phrase LIKE
         $found = Product::where('stock', '>', 0)
-            ->where('product_name', 'like', '%' . $name . '%')
+            ->whereRaw('LOWER(product_name) LIKE ?', ['%' . strtolower($name) . '%'])
             ->get();
 
         if ($found->isNotEmpty()) {
@@ -541,7 +542,7 @@ Balas dalam format JSON:
         $andFound = Product::where('stock', '>', 0)
             ->where(function ($q) use ($words) {
                 foreach ($words as $word) {
-                    $q->where('product_name', 'like', '%' . $word . '%');
+                    $q->whereRaw('LOWER(product_name) LIKE ?', ['%' . strtolower($word) . '%']);
                 }
             })
             ->get();
@@ -554,7 +555,7 @@ Balas dalam format JSON:
         return Product::where('stock', '>', 0)
             ->where(function ($q) use ($words) {
                 foreach ($words as $word) {
-                    $q->orWhere('product_name', 'like', '%' . $word . '%');
+                    $q->orWhereRaw('LOWER(product_name) LIKE ?', ['%' . strtolower($word) . '%']);
                 }
             })
             ->get();
@@ -801,9 +802,8 @@ Balas dalam format JSON:
                     'discount'   => 0,
                     'subtotal'   => $item['subtotal'],
                 ]);
-
-                Product::where('id', $item['product_id'])
-                    ->decrement('stock', $item['qty']);
+                // Stock is NOT decremented here — it's only decremented once the
+                // owner clicks "Proses" on the dashboard (see SaleController::tandaiDiproses).
             }
         });
 
@@ -846,40 +846,17 @@ Balas dalam format JSON:
 
     // ─── Unit conversion ──────────────────────────────────────────────────────
 
-    private const UNIT_TO_BASE = [
-        'buah'  => 1,
-        'pcs'   => 1,
-        'biji'  => 1,
-        'pak'   => 10,
-        'set'   => 6,
-        'lusin' => 12,
-        'kodi'  => 20,
-        'gross' => 144,
-    ];
-
     /**
      * Convert customer qty in their unit to product sale_unit qty and price.
      * Returns [converted_qty, unit_used, price_per_unit, subtotal].
      */
     private function convertUnit(float $customerQty, string $customerUnit, Product $product): array
     {
-        $customerUnitLower = strtolower(trim($customerUnit));
-        $saleUnitLower     = strtolower(trim((string)($product->sale_unit ?? '')));
+        $convertedQty = UnitConverter::toBaseUnit($customerQty, $customerUnit, $product);
+        $unitUsed     = $product->sale_unit ?: $customerUnit;
+        $subtotal     = (float) $product->sale_price * $convertedQty;
 
-        // Same unit (or product has no sale_unit) → no conversion
-        if ($customerUnitLower === $saleUnitLower || $saleUnitLower === '') {
-            $subtotal = (float)$product->sale_price * $customerQty;
-            return [$customerQty, $product->sale_unit ?? $customerUnit, (float)$product->sale_price, $subtotal];
-        }
-
-        $customerBase = self::UNIT_TO_BASE[$customerUnitLower] ?? 1;
-        $productBase  = self::UNIT_TO_BASE[$saleUnitLower]     ?? 1;
-
-        // Customer qty → base units → product sale_unit qty
-        $convertedQty = ($customerQty * $customerBase) / $productBase;
-        $subtotal     = (float)$product->sale_price * $convertedQty;
-
-        return [$convertedQty, $product->sale_unit, (float)$product->sale_price, $subtotal];
+        return [$convertedQty, $unitUsed, (float) $product->sale_price, $subtotal];
     }
 
     // ─── Cart helper ──────────────────────────────────────────────────────────

@@ -7,6 +7,7 @@ use App\Models\Product;
 use App\Models\Receivable;
 use App\Models\Sale;
 use App\Models\SaleDetail;
+use App\Services\UnitConverter;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -58,10 +59,11 @@ class SaleController extends Controller
                 $discounts  = $request->discount;
                 $units      = $request->unit;
 
-                // Cek stok dulu
+                // Cek stok dulu (dikonversi ke sale_unit)
                 foreach ($productIds as $i => $productId) {
                     $product = Product::findOrFail($productId);
-                    if ($product->stock < $quantities[$i]) {
+                    $baseQty = UnitConverter::toBaseUnit((float) $quantities[$i], $units[$i] ?? '', $product);
+                    if ($product->stock < $baseQty) {
                         throw new \Exception("Stok {$product->product_name} tidak mencukupi. Stok tersedia: {$product->stock} {$product->sale_unit}");
                     }
                 }
@@ -105,7 +107,8 @@ class SaleController extends Controller
                     $detail->save();
 
                     $product = Product::findOrFail($productId);
-                    $product->stock -= $qty;
+                    $baseQty = UnitConverter::toBaseUnit((float) $qty, $units[$i] ?? '', $product);
+                    $product->stock -= $baseQty;
                     $product->save();
                 }
 
@@ -177,10 +180,11 @@ class SaleController extends Controller
         try {
             DB::transaction(function () use ($request, $sale) {
 
-                // Kembalikan stok lama
+                // Kembalikan stok lama (dikonversi ke sale_unit)
                 foreach ($sale->details as $oldDetail) {
                     $product = Product::findOrFail($oldDetail->product_id);
-                    $product->stock += $oldDetail->quantity;
+                    $baseQty = UnitConverter::toBaseUnit((float) $oldDetail->quantity, $oldDetail->unit ?? '', $product);
+                    $product->stock += $baseQty;
                     $product->save();
                 }
 
@@ -192,10 +196,11 @@ class SaleController extends Controller
                 $discounts  = $request->discount;
                 $units      = $request->unit;
 
-                // Cek stok baru
+                // Cek stok baru (dikonversi ke sale_unit)
                 foreach ($productIds as $i => $productId) {
                     $product = Product::findOrFail($productId);
-                    if ($product->stock < $quantities[$i]) {
+                    $baseQty = UnitConverter::toBaseUnit((float) $quantities[$i], $units[$i] ?? '', $product);
+                    if ($product->stock < $baseQty) {
                         throw new \Exception("Stok {$product->product_name} tidak mencukupi. Stok tersedia: {$product->stock} {$product->sale_unit}");
                     }
                 }
@@ -220,7 +225,8 @@ class SaleController extends Controller
                     $detail->save();
 
                     $product = Product::findOrFail($productId);
-                    $product->stock -= $qty;
+                    $baseQty = UnitConverter::toBaseUnit((float) $qty, $units[$i] ?? '', $product);
+                    $product->stock -= $baseQty;
                     $product->save();
                 }
 
@@ -267,10 +273,11 @@ class SaleController extends Controller
         $sale = Sale::with('details', 'receivable')->findOrFail($id);
 
         DB::transaction(function () use ($sale) {
-            // Kembalikan stok
+            // Kembalikan stok (dikonversi ke sale_unit)
             foreach ($sale->details as $detail) {
                 $product = Product::findOrFail($detail->product_id);
-                $product->stock += $detail->quantity;
+                $baseQty = UnitConverter::toBaseUnit((float) $detail->quantity, $detail->unit ?? '', $product);
+                $product->stock += $baseQty;
                 $product->save();
             }
 
@@ -290,9 +297,30 @@ class SaleController extends Controller
 
     public function tandaiDiproses(string $id)
     {
-        $sale = Sale::findOrFail($id);
-        $sale->is_new = false;
-        $sale->save();
+        $sale = Sale::with('details')->findOrFail($id);
+
+        try {
+            DB::transaction(function () use ($sale) {
+                foreach ($sale->details as $detail) {
+                    $product = Product::findOrFail($detail->product_id);
+                    $baseQty = UnitConverter::toBaseUnit((float) $detail->quantity, $detail->unit ?? '', $product);
+
+                    if ($product->stock < $baseQty) {
+                        throw new \Exception("Stok {$product->product_name} tidak mencukupi untuk memproses pesanan ini. Stok tersedia: {$product->stock} {$product->sale_unit}");
+                    }
+
+                    $product->stock -= $baseQty;
+                    $product->save();
+                }
+
+                $sale->is_new = false;
+                $sale->save();
+            });
+        } catch (\Exception $e) {
+            return redirect()
+                ->route('dashboard')
+                ->with('error', $e->getMessage());
+        }
 
         return redirect()
             ->route('dashboard')

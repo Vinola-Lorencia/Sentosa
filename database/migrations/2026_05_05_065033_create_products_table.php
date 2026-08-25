@@ -16,7 +16,7 @@ return new class extends Migration
             $table->string('product_name');
             $table->decimal('sale_price', 10, 2);
             $table->string('sale_unit');
-            $table->integer('dus_to_unit')->default(1);
+            $table->decimal('dus_to_unit', 8, 2)->default(1);
             $table->integer('stock')->default(0);
             $table->timestamps();
         });

@@ -9,7 +9,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('products', function (Blueprint $table) {
-            $table->integer('units_per_sale_unit')->default(1)->after('sale_unit');
+            $table->decimal('units_per_sale_unit', 8, 2)->default(1)->after('sale_unit');
         });
     }
 

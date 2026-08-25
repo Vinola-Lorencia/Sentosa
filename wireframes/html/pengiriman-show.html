@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<title>Detail Pengiriman — Sentosa Wireframe</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="wf-shell">
+    
+    <aside class="wf-sidebar">
+      <div class="logo">TOKO SENTOSA<br><span style="font-weight:400;font-size:11px;">Sistem Inventaris</span></div>
+      
+      <div class="section-title">Manajemen Stok</div>
+      
+      <div class="menu-item">Produk</div>
+  
+      <div class="section-title">Master Data</div>
+      
+      <div class="menu-item">Suppliers</div>
+      <div class="menu-item">Pelanggan</div>
+  
+      <div class="section-title">Pembelian</div>
+      
+      <div class="menu-item">Purchase Orders</div>
+      <div class="menu-item">Pembelian</div>
+  
+      <div class="section-title">Penjualan</div>
+      
+      <div class="menu-item">Penjualan<span class="menu-badge">3</span></div>
+      <div class="menu-item active">Pengiriman</div>
+  
+      <div class="section-title">Keuangan</div>
+      
+      <div class="menu-item">Piutang</div>
+  
+      <div class="section-title">Laporan</div>
+      
+      <div class="menu-item">Lap. Penjualan</div>
+      <div class="menu-item">Lap. Pembelian</div>
+      <div class="menu-item">Lap. Piutang</div>
+  
+      <div class="section-title">Settings</div>
+      
+      <div class="menu-item">Users</div>
+      <div class="menu-item">Role</div>
+  
+      <div class="user-box">
+        <div style="font-weight:600;color:#333;">Nama User</div>
+        <div>user@sentosa.com</div>
+        <div style="margin-top:10px;display:flex;gap:8px;">
+          <span class="wf-badge">Profile</span>
+          <span class="wf-badge">Keluar</span>
+        </div>
+      </div>
+    </aside>
+    <div class="wf-main">
+      <div class="wf-topbar">
+        <h1>Detail Pengiriman</h1>
+        <div class="actions"><button class="wf-btn">Print Surat Jalan</button><button class="wf-btn">Back</button></div>
+      </div>
+      <div class="wf-content">
+        <div class="wf-panel"><div style="font-weight:600;margin-bottom:14px;">Surat Jalan Header</div><div style="display:flex;justify-content:space-between;"><div><b>TOKO SENTOSA</b><br><span class="hint">Alamat toko, telepon</span></div><div style="text-align:right;"><b>SURAT JALAN</b><br><span class="hint">No, Tanggal, Ref Invoice</span></div></div></div>
+<div class="wf-two-col" style=""><div style="display:flex;flex-direction:column;gap:16px;"><div class="wf-panel"><div class="hint">Kepada</div><div style="font-weight:700;"><span class="bar" style="width:70%;display:inline-block;"></span></div><div class="hint" style="margin-top:8px;"><span class="bar" style="width:90%;display:inline-block;"></span></div></div></div><div style="display:flex;flex-direction:column;gap:16px;"><div class="wf-panel"><div class="hint">Info Pengiriman</div>Tipe / Ekspedisi / Ongkir / Status / Jumlah Colly</div></div></div>
+<div class="wf-panel" style="padding:0;overflow:hidden;">
+        
+        <table class="wf-table">
+          <thead><tr><th>No</th><th>Produk</th><th>Qty</th><th>Unit</th><th>Keterangan</th></tr></thead>
+          <tbody>
+            <tr><td><span class="bar" style="width:65%"></span></td><td><span class="bar" style="width:35%"></span></td><td><span class="bar" style="width:55%"></span></td><td><span class="bar" style="width:65%"></span></td><td><span class="bar" style="width:40%"></span></td></tr><tr><td><span class="bar" style="width:40%"></span></td><td><span class="bar" style="width:35%"></span></td><td><span class="bar" style="width:35%"></span></td><td><span class="bar" style="width:35%"></span></td><td><span class="bar" style="width:65%"></span></td></tr>
+          </tbody>
+        </table>
+        
+        
+      </div>
+<div class="wf-two-col" style="grid-template-columns:1fr 1fr 1fr;text-align:center;"><div><div class="hint">Pengirim</div><div style="border-top:2px solid var(--border-strong);margin-top:40px;padding-top:8px;"><span class="bar" style="width:60%;display:inline-block;"></span></div></div><div><div class="hint">Kurir</div><div style="border-top:2px solid var(--border-strong);margin-top:40px;padding-top:8px;"><span class="bar" style="width:60%;display:inline-block;"></span></div></div><div><div class="hint">Penerima</div><div style="border-top:2px solid var(--border-strong);margin-top:40px;padding-top:8px;"><span class="bar" style="width:60%;display:inline-block;"></span></div></div></div>
+<div style="display:flex;gap:12px;justify-content:flex-end;"><button class="wf-btn">Edit</button><button class="wf-btn">Hapus</button></div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

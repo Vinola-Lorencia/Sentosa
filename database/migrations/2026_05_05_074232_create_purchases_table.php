@@ -10,7 +10,7 @@ return new class extends Migration
     {
         Schema::create('purchases', function (Blueprint $table) {
             $table->id('purchase_id');
-            $table->unsignedBigInteger('po_id')->nullable();
+            $table->bigInteger('po_id')->nullable();
             $table->foreign('po_id')->references('po_id')->on('purchase_orders')->onDelete('set null');
             $table->foreignId('supplier_id')->constrained('suppliers');
             $table->foreignId('user_id')->constrained('users');

@@ -12,8 +12,8 @@ return new class extends Migration
             $table->id('delivery_id');
             $table->foreignId('sale_id')->constrained('sales', 'sale_id')->onDelete('cascade');
             $table->date('delivery_date');
-            $table->enum('type', ['Ambil Sendiri', 'Dikirim']);
-            $table->enum('status', ['Pending', 'Dikirim'])->default('Pending');
+            $table->string('type')->comment('Ambil Sendiri, Dikirim');
+            $table->string('status')->default('Pending')->comment('Pending, Dikirim');
             $table->string('recipient_name');
             $table->string('recipient_phone')->nullable();
             $table->text('address')->nullable();

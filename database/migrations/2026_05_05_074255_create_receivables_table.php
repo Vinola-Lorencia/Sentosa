@@ -13,7 +13,7 @@ return new class extends Migration
     {
         Schema::create('receivables', function (Blueprint $table) {
             $table->id('receivable_id');
-            $table->unsignedBigInteger('sale_id');
+            $table->bigInteger('sale_id');
             $table->foreign('sale_id')->references('sale_id')->on('sales')->onDelete('cascade');
             $table->foreignId('customer_id')->nullable()->constrained('customers');
             $table->date('due_date');

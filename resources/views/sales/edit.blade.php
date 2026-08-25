@@ -156,11 +156,9 @@
                                                     class="qty-input w-24 border-gray-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
                                             </td>
                                             <td class="px-4 py-3">
-                                                <span class="unit-display text-sm text-gray-700">
-                                                    {{ $detail->unit ?: $detail->product->sale_unit }}
-                                                </span>
-                                                <input type="hidden" name="unit[]" class="unit-input"
-                                                    value="{{ $detail->unit ?: $detail->product->sale_unit }}">
+                                                <input type="text" name="unit[]"
+                                                    value="{{ $detail->unit ?: $detail->product->sale_unit }}"
+                                                    class="unit-input w-24 border-gray-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
                                             </td>
                                             <td class="px-4 py-3">
                                                 <input type="number" step="0.01" name="price[]"
@@ -313,7 +311,6 @@
 
                         row.querySelector('.price-input').value         = data.price;
                         row.querySelector('.unit-input').value          = data.unit;
-                        row.querySelector('.unit-display').textContent  = data.unit;
                         row.querySelector('.stock-display').textContent = data.stock;
 
                         requestAnimationFrame(() => updateSubtotal(row));
@@ -351,8 +348,8 @@
                             class="qty-input w-24 border-gray-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
                     </td>
                     <td class="px-4 py-3">
-                        <span class="unit-display text-sm text-gray-700">-</span>
-                        <input type="hidden" name="unit[]" class="unit-input">
+                        <input type="text" name="unit[]"
+                            class="unit-input w-24 border-gray-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
                     </td>
                     <td class="px-4 py-3">
                         <input type="number" step="0.01" name="price[]"

@@ -1,0 +1,6 @@
+{
+  "name": "wireframes-tooling",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Local tooling to generate and screenshot HTML wireframes. Not part of the Sentosa app."
+}

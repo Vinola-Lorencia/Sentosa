@@ -13,11 +13,11 @@ class ProductController extends Controller
         $query = Product::query();
 
         if ($request->filled('search')) {
-            $query->where('product_name', 'like', '%' . $request->search . '%');
+            $query->whereRaw('LOWER(product_name) LIKE ?', ['%' . strtolower($request->search) . '%']);
         }
 
         if ($request->filled('brand')) {
-            $query->where('brand', 'like', '%' . $request->brand . '%');
+            $query->whereRaw('LOWER(brand) LIKE ?', ['%' . strtolower($request->brand) . '%']);
         }
 
         if ($request->stock == 'available') {
@@ -51,7 +51,7 @@ class ProductController extends Controller
             'default_buy_discount' => ['required', 'numeric', 'min:0'],
             'sale_unit'            => ['required', 'string', 'max:50'],
             'purchase_unit'        => ['required', 'string', 'max:50'],
-            'dus_to_unit'          => ['required', 'integer', 'min:1'],
+            'dus_to_unit'          => ['required', 'numeric', 'min:0.01'],
             'stock'                => ['required', 'integer', 'min:0'],
         ]);
 
@@ -83,7 +83,7 @@ class ProductController extends Controller
             'default_buy_discount' => ['required', 'numeric', 'min:0'],
             'sale_unit'            => ['required', 'string', 'max:50'],
             'purchase_unit'        => ['required', 'string', 'max:50'],
-            'dus_to_unit'          => ['required', 'integer', 'min:1'],
+            'dus_to_unit'          => ['required', 'numeric', 'min:0.01'],
             'stock'                => ['required', 'integer', 'min:0'],
         ]);
 

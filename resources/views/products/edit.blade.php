@@ -32,9 +32,9 @@
                             <x-input-label for="image" :value="__('Gambar Produk')" />
 
                             {{-- Gambar saat ini --}}
-                            @if($product->image)
+                            @if($product->image_path)
                                 <div class="mt-2 mb-3">
-                                    <img src="{{ Storage::url($product->image) }}" alt="{{ $product->product_name }}"
+                                    <img src="{{ app(\App\Services\SupabaseStorageService::class)->getPublicUrl($product->image_path) }}" alt="{{ $product->product_name }}"
                                         class="h-32 w-32 object-cover rounded-lg border border-gray-200">
                                     <div class="mt-2 flex items-center gap-2">
                                         <input type="checkbox" name="remove_image" id="remove_image" value="1">

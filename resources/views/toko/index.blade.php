@@ -80,8 +80,8 @@
                     {{-- Placeholder foto --}}
                                         {{-- Gambar produk --}}
                     <div class="h-36 bg-gray-100 flex items-center justify-center overflow-hidden">
-                        @if($product->image)
-                            <img src="{{ Storage::url($product->image) }}"
+                        @if($product->image_path)
+                            <img src="{{ app(\App\Services\SupabaseStorageService::class)->getPublicUrl($product->image_path) }}"
                                 alt="{{ $product->product_name }}"
                                 class="h-full w-full object-cover">
                         @else

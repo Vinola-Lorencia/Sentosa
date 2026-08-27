@@ -3,11 +3,15 @@
 namespace App\Http\Controllers;
 
 use App\Models\Product;
+use App\Services\SupabaseStorageService;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Storage;
 
 class ProductController extends Controller
 {
+    public function __construct(private SupabaseStorageService $supabaseStorage)
+    {
+    }
+
     public function index(Request $request)
     {
         $query = Product::query();
@@ -55,9 +59,13 @@ class ProductController extends Controller
             'stock'                => ['required', 'integer', 'min:0'],
         ]);
 
-        // Upload gambar
+        unset($data['image']);
+
+        // Upload gambar ke Supabase Storage
         if ($request->hasFile('image')) {
-            $data['image'] = $request->file('image')->store('products', 'public');
+            $file = $request->file('image');
+            $path = 'products/' . uniqid('product_', true) . '.' . $file->getClientOriginalExtension();
+            $data['image_path'] = $this->supabaseStorage->upload($file, $path);
         }
 
         Product::create($data);
@@ -87,20 +95,24 @@ class ProductController extends Controller
             'stock'                => ['required', 'integer', 'min:0'],
         ]);
 
-        // Upload gambar baru — hapus yang lama
+        unset($data['image']);
+
+        // Upload gambar baru ke Supabase Storage — hapus yang lama
         if ($request->hasFile('image')) {
-            if ($product->image) {
-                Storage::disk('public')->delete($product->image);
+            if ($product->image_path) {
+                $this->supabaseStorage->delete($product->image_path);
             }
-            $data['image'] = $request->file('image')->store('products', 'public');
+            $file = $request->file('image');
+            $path = 'products/' . uniqid('product_', true) . '.' . $file->getClientOriginalExtension();
+            $data['image_path'] = $this->supabaseStorage->upload($file, $path);
         }
 
         // Hapus gambar kalau dicentang
         if ($request->boolean('remove_image')) {
-            if ($product->image) {
-                Storage::disk('public')->delete($product->image);
+            if ($product->image_path) {
+                $this->supabaseStorage->delete($product->image_path);
             }
-            $data['image'] = null;
+            $data['image_path'] = null;
         }
 
         $product->update($data);
@@ -113,8 +125,8 @@ class ProductController extends Controller
     public function destroy(Product $product)
     {
         // Hapus gambar saat produk dihapus
-        if ($product->image) {
-            Storage::disk('public')->delete($product->image);
+        if ($product->image_path) {
+            $this->supabaseStorage->delete($product->image_path);
         }
 
         $product->delete();

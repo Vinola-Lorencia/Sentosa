@@ -10,6 +10,7 @@ class Product extends Model
         'product_name',
         'brand',
         'image',
+        'image_path',
         'default_buy_price',
         'default_buy_discount',
         'sale_price',

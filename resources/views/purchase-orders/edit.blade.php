@@ -270,7 +270,7 @@
                 discount:      {{ (float) $product->default_buy_discount }},
                 purchase_unit: "{{ addslashes($product->purchase_unit) }}",
                 sale_unit:     "{{ addslashes($product->sale_unit) }}",
-                conversion:    {{ (int) $product->dus_to_unit }}
+                conversion:    {{ (float) $product->dus_to_unit }}
             },
             @endforeach
         };

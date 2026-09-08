@@ -102,8 +102,8 @@ class PurchaseTest extends TestCase
 
         $response->assertRedirect(route('purchases.index'));
 
-        // Stok bertambah
-        $this->assertEquals(24, $this->product->fresh()->stock);
+        // Stok bertambah dalam Buah (24 Lusin = 288 Buah)
+        $this->assertEquals(288, $this->product->fresh()->stock);
 
         // PO status jadi Completed
         $this->assertEquals('Completed', $this->po->fresh()->status);
@@ -126,8 +126,8 @@ class PurchaseTest extends TestCase
 
         $purchase = Purchase::latest('purchase_id')->first();
 
-        // Stok sudah 24
-        $this->assertEquals(24, $this->product->fresh()->stock);
+        // Stok sudah 288 Buah (24 Lusin)
+        $this->assertEquals(288, $this->product->fresh()->stock);
 
         // Hapus purchase
         $this->actingAs($this->user)

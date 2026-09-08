@@ -6,13 +6,14 @@ use App\Models\Product;
 use App\Models\Purchase;
 use App\Models\Receivable;
 use App\Models\Sale;
+use App\Models\User;
 
 use Illuminate\Http\Request;
 use Carbon\Carbon;
 
 class DashboardController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
         $now = Carbon::now();
 
@@ -70,6 +71,44 @@ class DashboardController extends Controller
             ->latest('sale_id')
             ->get();
 
+        // ✅ Input produk oleh Karyawan — jumlah bulan ini + produk terakhir
+        $inputProdukKaryawan = User::whereHas('role', function ($q) {
+                $q->where('role_name', 'Karyawan');
+            })
+            ->get()
+            ->map(function ($karyawan) use ($now) {
+                return [
+                    'user'            => $karyawan,
+                    'jumlah_bulan_ini' => Product::where('created_by', $karyawan->id)
+                        ->whereMonth('created_at', $now->month)
+                        ->whereYear('created_at', $now->year)
+                        ->count(),
+                    'produk_terakhir' => Product::where('created_by', $karyawan->id)
+                        ->latest('created_at')
+                        ->first(),
+                ];
+            });
+
+        // ✅ Produk terbaru — filter: today / week / month
+        $produkFilter = $request->get('produk_filter', 'all');
+        $produkTerbaruQuery = Product::with('creator')
+            ->whereNotNull('created_at')
+            ->latest('created_at');
+
+        if ($produkFilter === 'today') {
+            $produkTerbaruQuery->whereDate('created_at', $now->toDateString());
+        } elseif ($produkFilter === 'week') {
+            $produkTerbaruQuery->whereBetween('created_at', [
+                $now->copy()->startOfWeek(),
+                $now->copy()->endOfWeek(),
+            ]);
+        } elseif ($produkFilter === 'month') {
+            $produkTerbaruQuery->whereMonth('created_at', $now->month)
+                ->whereYear('created_at', $now->year);
+        }
+
+        $produkTerbaru = $produkTerbaruQuery->take(10)->get();
+
         return view('dashboard', compact(
             'totalPenjualanBulanIni',
             'totalPembelianBulanIni',
@@ -80,6 +119,9 @@ class DashboardController extends Controller
             'transaksiTerakhir',
             'produkStokMenipis',
             'pesananBaru',
+            'inputProdukKaryawan',
+            'produkTerbaru',
+            'produkFilter',
         ));
     }
 }

@@ -172,6 +172,7 @@
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Metode</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
                             <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Total</th>
+                            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Laba</th>
                         </tr>
                     </thead>
                     <tbody class="bg-white divide-y divide-gray-200">
@@ -204,10 +205,13 @@
                                 <td class="px-6 py-4 text-sm font-semibold text-gray-900 text-right whitespace-nowrap">
                                     Rp {{ number_format($sale->total_amount, 0, ',', '.') }}
                                 </td>
+                                <td class="px-6 py-4 text-sm font-semibold text-green-700 text-right whitespace-nowrap">
+                                    Rp {{ number_format($sale->laba, 0, ',', '.') }}
+                                </td>
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="6" class="px-6 py-4 text-center text-sm text-gray-500">
+                                <td colspan="7" class="px-6 py-4 text-center text-sm text-gray-500">
                                     Tidak ada data penjualan pada periode ini.
                                 </td>
                             </tr>
@@ -220,6 +224,9 @@
                             </td>
                             <td class="px-6 py-4 text-right text-sm font-bold text-indigo-600 whitespace-nowrap">
                                 Rp {{ number_format($total, 0, ',', '.') }}
+                            </td>
+                            <td class="px-6 py-4 text-right text-sm font-bold text-green-700 whitespace-nowrap">
+                                Rp {{ number_format($labaTotal, 0, ',', '.') }}
                             </td>
                         </tr>
                     </tfoot>

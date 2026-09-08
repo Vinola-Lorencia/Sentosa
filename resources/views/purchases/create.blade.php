@@ -212,7 +212,7 @@
                             <td class="px-4 py-3 text-sm text-gray-500">${item.purchase_qty} ${item.purchase_unit}</td>
                             <td class="px-4 py-3 text-sm text-gray-500">${item.purchase_unit}</td>
                             <td class="px-4 py-3">
-                                <input type="number" name="quantity[]" value="${item.quantity}" min="0"
+                                <input type="number" name="quantity[]" value="${item.quantity}" min="0" step="0.01"
                                     class="qty-input w-28 border-gray-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm">
                             </td>
                             <td class="px-4 py-3 text-sm text-gray-700">${item.unit}</td>

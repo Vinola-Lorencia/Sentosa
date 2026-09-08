@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Product;
 use App\Services\SupabaseStorageService;
+use App\Services\UnitConverter;
 use Illuminate\Http\Request;
 
 class ProductController extends Controller
@@ -44,28 +45,76 @@ class ProductController extends Controller
         return view('products.create');
     }
 
+    public function myProducts(Request $request)
+    {
+        $now = now();
+
+        $query = Product::where('created_by', auth()->id())
+            ->latest('created_at');
+
+        $filter = $request->get('filter', 'all');
+
+        if ($filter === 'today') {
+            $query->whereDate('created_at', $now->toDateString());
+        } elseif ($filter === 'week') {
+            $query->whereBetween('created_at', [$now->copy()->startOfWeek(), $now->copy()->endOfWeek()]);
+        } elseif ($filter === 'month') {
+            $query->whereMonth('created_at', $now->month)->whereYear('created_at', $now->year);
+        }
+
+        $products = $query->paginate(15)->withQueryString();
+
+        $totalBulanIni = Product::where('created_by', auth()->id())
+            ->whereMonth('created_at', $now->month)
+            ->whereYear('created_at', $now->year)
+            ->count();
+
+        $totalKeseluruhan = Product::where('created_by', auth()->id())->count();
+
+        return view('products.my-products', compact('products', 'totalBulanIni', 'totalKeseluruhan', 'filter'));
+    }
+
     public function store(Request $request)
     {
         $data = $request->validate([
-            'product_name'         => ['required', 'string', 'max:255'],
-            'sale_price'           => ['required', 'numeric', 'min:0'],
+            'product_name'         => ['required', 'string', 'max:255', 'unique:products,product_name'],
+            'stock_qty'            => ['required', 'numeric', 'min:0'],
+            'stock_unit'           => ['required', 'in:Buah,Lusin,Kodi,Gross'],
+            'image'                => ['required', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
             'brand'                => ['nullable', 'string', 'max:255'],
-            'image'                => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
-            'default_buy_price'    => ['required', 'numeric', 'min:0'],
-            'default_buy_discount' => ['required', 'numeric', 'min:0'],
-            'sale_unit'            => ['required', 'string', 'max:50'],
-            'purchase_unit'        => ['required', 'string', 'max:50'],
-            'dus_to_unit'          => ['required', 'numeric', 'min:0.01'],
-            'stock'                => ['required', 'integer', 'min:0'],
+            'default_buy_price'    => ['nullable', 'numeric', 'min:0'],
+            'default_buy_discount' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'sale_price'           => ['nullable', 'numeric', 'min:0'],
+            'sale_unit'            => ['nullable', 'string'],
+            'purchase_unit'        => ['nullable', 'string'],
+            'dus_to_unit'          => ['nullable', 'numeric', 'min:0'],
+        ], [
+            'product_name.unique' => 'Produk dengan nama ini sudah terdaftar. Periksa kembali sebelum menambahkan.',
         ]);
+
+        // Optional fields are NOT NULL (or should be a sane default rather
+        // than a bare empty string) in the products table, so a blank
+        // submission needs to be coerced here rather than left for the DB.
+        $data['default_buy_price']    = $this->blankToDefault($data['default_buy_price'] ?? null, 0);
+        $data['default_buy_discount'] = $this->blankToDefault($data['default_buy_discount'] ?? null, 0);
+        $data['sale_price']           = $this->blankToDefault($data['sale_price'] ?? null, 0);
+        $data['sale_unit']            = $this->blankToDefault($data['sale_unit'] ?? null, 'Buah');
+        $data['purchase_unit']        = $this->blankToDefault($data['purchase_unit'] ?? null, 'Goni');
+        $data['dus_to_unit']          = $this->blankToDefault($data['dus_to_unit'] ?? null, 1);
+
+        // stock is always stored in Buah — convert the entered qty+unit
+        // using the same UNIT_TO_BASE table the rest of the app uses.
+        $factor = UnitConverter::UNIT_TO_BASE[strtolower($data['stock_unit'])] ?? 1;
+        $data['stock'] = (float) $data['stock_qty'] * $factor;
+        unset($data['stock_qty'], $data['stock_unit']);
 
         unset($data['image']);
 
+        $data['created_by'] = auth()->id();
+
         // Upload gambar ke Supabase Storage
         if ($request->hasFile('image')) {
-            $file = $request->file('image');
-            $path = 'products/' . uniqid('product_', true) . '.' . $file->getClientOriginalExtension();
-            $data['image_path'] = $this->supabaseStorage->upload($file, $path);
+            $data['image_path'] = $this->storeProductPhoto($request->file('image'));
         }
 
         Product::create($data);
@@ -73,6 +122,43 @@ class ProductController extends Controller
         return redirect()
             ->route('products.index')
             ->with('success', 'Product created successfully.');
+    }
+
+    public function checkProductName(Request $request)
+    {
+        $name = trim($request->input('name', ''));
+
+        if ($name === '') {
+            return response()->json(['found' => false, 'matches' => []]);
+        }
+
+        $existing = Product::whereRaw(
+            'LOWER(product_name) LIKE ?',
+            ['%' . strtolower($name) . '%']
+        )->limit(3)->get(['product_name']);
+
+        return response()->json([
+            'found'   => $existing->isNotEmpty(),
+            'matches' => $existing->pluck('product_name'),
+        ]);
+    }
+
+    public function byKaryawan(int $userId)
+    {
+        $products = Product::where('created_by', $userId)
+            ->latest('created_at')
+            ->get(['id', 'product_name', 'stock', 'created_at']);
+
+        return response()->json([
+            'products' => $products->map(fn ($product) => [
+                'id'           => $product->id,
+                'product_name' => $product->product_name,
+                'stock'        => (float) $product->stock,
+                'stok_display' => $product->stok_display,
+                'created_at'   => $product->created_at?->format('d M Y H:i') ?? '-',
+                'edit_url'     => route('products.edit', $product->id),
+            ]),
+        ]);
     }
 
     public function edit(Product $product)
@@ -92,19 +178,14 @@ class ProductController extends Controller
             'sale_unit'            => ['required', 'string', 'max:50'],
             'purchase_unit'        => ['required', 'string', 'max:50'],
             'dus_to_unit'          => ['required', 'numeric', 'min:0.01'],
-            'stock'                => ['required', 'integer', 'min:0'],
+            'stock'                => ['required', 'numeric', 'min:0'],
         ]);
 
         unset($data['image']);
 
         // Upload gambar baru ke Supabase Storage — hapus yang lama
         if ($request->hasFile('image')) {
-            if ($product->image_path) {
-                $this->supabaseStorage->delete($product->image_path);
-            }
-            $file = $request->file('image');
-            $path = 'products/' . uniqid('product_', true) . '.' . $file->getClientOriginalExtension();
-            $data['image_path'] = $this->supabaseStorage->upload($file, $path);
+            $data['image_path'] = $this->storeProductPhoto($request->file('image'), $product->image_path);
         }
 
         // Hapus gambar kalau dicentang
@@ -134,5 +215,37 @@ class ProductController extends Controller
         return redirect()
             ->route('products.index')
             ->with('success', 'Product deleted successfully.');
+    }
+
+    public function updatePhoto(Request $request, Product $product)
+    {
+        $request->validate([
+            'image' => ['required', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
+        ]);
+
+        $product->update([
+            'image_path' => $this->storeProductPhoto($request->file('image'), $product->image_path),
+        ]);
+
+        return response()->json([
+            'success'    => true,
+            'image_url'  => $this->supabaseStorage->getPublicUrl($product->image_path),
+        ]);
+    }
+
+    private function blankToDefault(mixed $value, mixed $default): mixed
+    {
+        return $value === null || $value === '' ? $default : $value;
+    }
+
+    private function storeProductPhoto($file, ?string $oldPath = null): string
+    {
+        if ($oldPath) {
+            $this->supabaseStorage->delete($oldPath);
+        }
+
+        $path = 'products/' . uniqid('product_', true) . '.' . $file->getClientOriginalExtension();
+
+        return $this->supabaseStorage->upload($file, $path);
     }
 }

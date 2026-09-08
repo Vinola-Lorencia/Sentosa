@@ -31,6 +31,44 @@ class DatabaseSeeder extends Seeder
             'role_id' => Role::firstOrCreate(['role_name' => 'Pemilik'])->id,
         ]);
 
+        Role::firstOrCreate(['role_name' => 'Karyawan']);
+
+        $karyawanRoleId = Role::firstOrCreate(['role_name' => 'Karyawan'])->id;
+
+        User::factory()->create([
+            'name' => 'Karyawan',
+            'email' => 'karyawan@tokosentosa.com',
+            'password' => Hash::make('karyawan123'),
+            'role_id' => $karyawanRoleId,
+        ]);
+
+        User::firstOrCreate(
+            ['email' => 'agus@tokosentosa.com'],
+            [
+                'name' => 'Agus',
+                'password' => Hash::make('agus123'),
+                'role_id' => $karyawanRoleId,
+            ]
+        );
+
+        User::firstOrCreate(
+            ['email' => 'faisal@tokosentosa.com'],
+            [
+                'name' => 'Faisal',
+                'password' => Hash::make('faisal123'),
+                'role_id' => $karyawanRoleId,
+            ]
+        );
+
+        User::firstOrCreate(
+            ['email' => 'anwar@tokosentosa.com'],
+            [
+                'name' => 'Anwar',
+                'password' => Hash::make('anwar123'),
+                'role_id' => $karyawanRoleId,
+            ]
+        );
+
         $this->call(GmProductSeeder::class);
     }
 }

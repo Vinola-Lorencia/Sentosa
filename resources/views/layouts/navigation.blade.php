@@ -55,47 +55,58 @@
                 <div class="mt-3 space-y-1">
                     <a href="{{ route('products.index') }}"
                         class="flex items-center gap-3 px-3 py-2 rounded-2xl text-sm font-medium hover:bg-slate-100
-                        {{ request()->routeIs('products.*') ? 'bg-slate-100' : '' }}">
+                        {{ request()->routeIs('products.*') && !request()->routeIs('products.my') ? 'bg-slate-100' : '' }}">
                         Produk
                     </a>
+                    @if(auth()->user()->role?->role_name === 'Karyawan')
+                        <a href="{{ route('products.my') }}"
+                            class="flex items-center gap-3 px-3 py-2 rounded-2xl text-sm font-medium hover:bg-slate-100
+                            {{ request()->routeIs('products.my') ? 'bg-slate-100' : '' }}">
+                            Produk Saya
+                        </a>
+                    @endif
                 </div>
             </div>
 
             <!-- MASTER -->
-            <div>
-                <p class="text-xs font-semibold uppercase text-slate-400">Master Data</p>
+            @if(auth()->user()->role?->role_name === 'Pemilik')
+                <div>
+                    <p class="text-xs font-semibold uppercase text-slate-400">Master Data</p>
 
-                <div class="mt-3 space-y-1">
-                    <a href="{{ route('suppliers.index') }}"
-                        class="flex items-center gap-3 px-3 py-2 rounded-2xl text-sm font-medium hover:bg-slate-100
-                        {{ request()->routeIs('suppliers.*') ? 'bg-slate-100' : '' }}">
-                        Suppliers
-                    </a>
+                    <div class="mt-3 space-y-1">
+                        <a href="{{ route('suppliers.index') }}"
+                            class="flex items-center gap-3 px-3 py-2 rounded-2xl text-sm font-medium hover:bg-slate-100
+                            {{ request()->routeIs('suppliers.*') ? 'bg-slate-100' : '' }}">
+                            Suppliers
+                        </a>
 
-                    <a href="{{ route('customers.index') }}"
-                        class="flex items-center gap-3 px-3 py-2 rounded-2xl text-sm font-medium hover:bg-slate-100
-                        {{ request()->routeIs('customers.*') ? 'bg-slate-100' : '' }}">
-                        Pelanggan
-                    </a>
+                        <a href="{{ route('customers.index') }}"
+                            class="flex items-center gap-3 px-3 py-2 rounded-2xl text-sm font-medium hover:bg-slate-100
+                            {{ request()->routeIs('customers.*') ? 'bg-slate-100' : '' }}">
+                            Pelanggan
+                        </a>
+                    </div>
                 </div>
-            </div>
+            @endif
 
-            <div>
-                <p class="text-xs font-semibold uppercase text-slate-400">Pembelian</p>
+            @if(auth()->user()->role?->role_name === 'Pemilik')
+                <div>
+                    <p class="text-xs font-semibold uppercase text-slate-400">Pembelian</p>
 
-                <div class="mt-3 space-y-1">
-                    <a href="{{ route('purchase-orders.index') }}"
-                        class="flex items-center gap-3 px-3 py-2 rounded-2xl text-sm font-medium hover:bg-slate-100
-                        {{ request()->routeIs('purchase-orders.*') ? 'bg-slate-100' : '' }}">
-                        Purchase Orders
-                    </a>
-                    <a href="{{ route('purchases.index') }}"
-                        class="flex items-center gap-3 px-3 py-2 rounded-2xl text-sm font-medium hover:bg-slate-100
-                        {{ request()->routeIs('purchases.*') ? 'bg-slate-100' : '' }}">
-                        Pembelian
-                    </a>
+                    <div class="mt-3 space-y-1">
+                        <a href="{{ route('purchase-orders.index') }}"
+                            class="flex items-center gap-3 px-3 py-2 rounded-2xl text-sm font-medium hover:bg-slate-100
+                            {{ request()->routeIs('purchase-orders.*') ? 'bg-slate-100' : '' }}">
+                            Purchase Orders
+                        </a>
+                        <a href="{{ route('purchases.index') }}"
+                            class="flex items-center gap-3 px-3 py-2 rounded-2xl text-sm font-medium hover:bg-slate-100
+                            {{ request()->routeIs('purchases.*') ? 'bg-slate-100' : '' }}">
+                            Pembelian
+                        </a>
+                    </div>
                 </div>
-            </div>
+            @endif
 
             <div>
                 <p class="text-xs font-semibold uppercase text-slate-400">Penjualan</p>
@@ -111,71 +122,77 @@
                             </span>
                         @endif
                     </a>
-                    <a href="{{ route('pengiriman.index') }}"
-                        class="flex items-center gap-3 px-3 py-2 rounded-2xl text-sm font-medium hover:bg-slate-100
-                        {{ request()->routeIs('pengiriman.*') ? 'bg-slate-100' : '' }}">
-                        Pengiriman
-                    </a>
+                    @if(auth()->user()->role?->role_name === 'Pemilik')
+                        <a href="{{ route('pengiriman.index') }}"
+                            class="flex items-center gap-3 px-3 py-2 rounded-2xl text-sm font-medium hover:bg-slate-100
+                            {{ request()->routeIs('pengiriman.*') ? 'bg-slate-100' : '' }}">
+                            Pengiriman
+                        </a>
+                    @endif
                 </div>
             </div>
-            <div>
-                <p class="text-xs font-semibold uppercase text-slate-400">Keuangan</p>
-                <div class="mt-3 space-y-1">
-                    <a href="{{ route('piutang.index') }}"
-                        class="flex items-center gap-3 px-3 py-2 rounded-2xl text-sm font-medium hover:bg-slate-100
-                        {{ request()->routeIs('piutang.*') ? 'bg-slate-100' : '' }}">
-                        Piutang
-                    </a>
+            @if(auth()->user()->role?->role_name === 'Pemilik')
+                <div>
+                    <p class="text-xs font-semibold uppercase text-slate-400">Keuangan</p>
+                    <div class="mt-3 space-y-1">
+                        <a href="{{ route('piutang.index') }}"
+                            class="flex items-center gap-3 px-3 py-2 rounded-2xl text-sm font-medium hover:bg-slate-100
+                            {{ request()->routeIs('piutang.*') ? 'bg-slate-100' : '' }}">
+                            Piutang
+                        </a>
 
-                    <a href="{{ route('pengiriman.index') }}"
-                        class="flex items-center gap-3 px-3 py-2 rounded-2xl text-sm font-medium hover:bg-slate-100
-                        {{ request()->routeIs('pengiriman.*') ? 'bg-slate-100' : '' }}">
-                        Pengiriman
-                    </a>
+                        <a href="{{ route('pengiriman.index') }}"
+                            class="flex items-center gap-3 px-3 py-2 rounded-2xl text-sm font-medium hover:bg-slate-100
+                            {{ request()->routeIs('pengiriman.*') ? 'bg-slate-100' : '' }}">
+                            Pengiriman
+                        </a>
+                    </div>
                 </div>
-            </div>
+            @endif
 
-            <div>
-                <p class="text-xs font-semibold uppercase text-slate-400">Laporan</p>
-                <div class="mt-3 space-y-1">
-                    <a href="{{ route('laporan.penjualan') }}"
-                        class="flex items-center gap-3 px-3 py-2 rounded-2xl text-sm font-medium hover:bg-slate-100
-                        {{ request()->routeIs('laporan.penjualan*') ? 'bg-slate-100' : '' }}">
-                        Lap. Penjualan
-                    </a>
-                    <a href="{{ route('laporan.pembelian') }}"
-                        class="flex items-center gap-3 px-3 py-2 rounded-2xl text-sm font-medium hover:bg-slate-100
-                        {{ request()->routeIs('laporan.pembelian*') ? 'bg-slate-100' : '' }}">
-                        Lap. Pembelian
-                    </a>
-                    <a href="{{ route('laporan.piutang') }}"
-                        class="flex items-center gap-3 px-3 py-2 rounded-2xl text-sm font-medium hover:bg-slate-100
-                        {{ request()->routeIs('laporan.piutang*') ? 'bg-slate-100' : '' }}">
-                        Lap. Piutang
-                    </a>
+            @if(auth()->user()->role?->role_name === 'Pemilik')
+                <div>
+                    <p class="text-xs font-semibold uppercase text-slate-400">Laporan</p>
+                    <div class="mt-3 space-y-1">
+                        <a href="{{ route('laporan.penjualan') }}"
+                            class="flex items-center gap-3 px-3 py-2 rounded-2xl text-sm font-medium hover:bg-slate-100
+                            {{ request()->routeIs('laporan.penjualan*') ? 'bg-slate-100' : '' }}">
+                            Lap. Penjualan
+                        </a>
+                        <a href="{{ route('laporan.pembelian') }}"
+                            class="flex items-center gap-3 px-3 py-2 rounded-2xl text-sm font-medium hover:bg-slate-100
+                            {{ request()->routeIs('laporan.pembelian*') ? 'bg-slate-100' : '' }}">
+                            Lap. Pembelian
+                        </a>
+                        <a href="{{ route('laporan.piutang') }}"
+                            class="flex items-center gap-3 px-3 py-2 rounded-2xl text-sm font-medium hover:bg-slate-100
+                            {{ request()->routeIs('laporan.piutang*') ? 'bg-slate-100' : '' }}">
+                            Lap. Piutang
+                        </a>
+                    </div>
                 </div>
-            </div>
-
-            
+            @endif
 
             <!-- SETTINGS -->
-            <div>
-                <p class="text-xs font-semibold uppercase text-slate-400">Settings</p>
+            @if(auth()->user()->role?->role_name === 'Pemilik')
+                <div>
+                    <p class="text-xs font-semibold uppercase text-slate-400">Settings</p>
 
-                <div class="mt-3 space-y-1">
-                    <a href="{{ route('users.index') }}"
-                        class="flex items-center gap-3 px-3 py-2 rounded-2xl text-sm font-medium hover:bg-slate-100
-                        {{ request()->routeIs('users.*') ? 'bg-slate-100' : '' }}">
-                        Users
-                    </a>
+                    <div class="mt-3 space-y-1">
+                        <a href="{{ route('users.index') }}"
+                            class="flex items-center gap-3 px-3 py-2 rounded-2xl text-sm font-medium hover:bg-slate-100
+                            {{ request()->routeIs('users.*') ? 'bg-slate-100' : '' }}">
+                            Users
+                        </a>
 
-                    <a href="{{ route('roles.index') }}"
-                        class="flex items-center gap-3 px-3 py-2 rounded-2xl text-sm font-medium hover:bg-slate-100
-                        {{ request()->routeIs('roles.*') ? 'bg-slate-100' : '' }}">
-                        Role
-                    </a>
+                        <a href="{{ route('roles.index') }}"
+                            class="flex items-center gap-3 px-3 py-2 rounded-2xl text-sm font-medium hover:bg-slate-100
+                            {{ request()->routeIs('roles.*') ? 'bg-slate-100' : '' }}">
+                            Role
+                        </a>
+                    </div>
                 </div>
-            </div>
+            @endif
 
         </div>
 
@@ -215,16 +232,25 @@
 
         <div class="px-4 py-4 space-y-2">
 
-            <a href="{{ route('dashboard') }}" class="block px-3 py-2 rounded-xl hover:bg-slate-100">Dashboard</a>
+            @if(auth()->user()->role?->role_name === 'Pemilik')
+                <a href="{{ route('dashboard') }}" class="block px-3 py-2 rounded-xl hover:bg-slate-100">Dashboard</a>
+            @endif
             <a href="{{ route('products.index') }}" class="block px-3 py-2 rounded-xl hover:bg-slate-100">Products</a>
-            <a href="{{ route('suppliers.index') }}" class="block px-3 py-2 rounded-xl hover:bg-slate-100">Suppliers</a>
-            <a href="{{ route('customers.index') }}" class="block px-3 py-2 rounded-xl hover:bg-slate-100">Customers</a>
-            <a href="{{ route('purchase-orders.index') }}" class="block px-3 py-2 rounded-xl hover:bg-slate-100">Purchase Orders</a>
-            <a href="{{ route('purchases.index') }}" class="block px-3 py-2 rounded-xl hover:bg-slate-100">Purchases</a>
+            @if(auth()->user()->role?->role_name === 'Karyawan')
+                <a href="{{ route('products.my') }}" class="block px-3 py-2 rounded-xl hover:bg-slate-100">Produk Saya</a>
+            @endif
+            @if(auth()->user()->role?->role_name === 'Pemilik')
+                <a href="{{ route('suppliers.index') }}" class="block px-3 py-2 rounded-xl hover:bg-slate-100">Suppliers</a>
+                <a href="{{ route('customers.index') }}" class="block px-3 py-2 rounded-xl hover:bg-slate-100">Customers</a>
+                <a href="{{ route('purchase-orders.index') }}" class="block px-3 py-2 rounded-xl hover:bg-slate-100">Purchase Orders</a>
+                <a href="{{ route('purchases.index') }}" class="block px-3 py-2 rounded-xl hover:bg-slate-100">Purchases</a>
+            @endif
             <a href="{{ route('sales.index') }}" class="block px-3 py-2 rounded-xl hover:bg-slate-100">Sales</a>
-            <a href="{{ route('piutang.index') }}" class="block px-3 py-2 rounded-xl hover:bg-slate-100">Piutang</a>
-            <a href="{{ route('roles.index') }}" class="block px-3 py-2 rounded-xl hover:bg-slate-100">Roles</a>
-            <a href="{{ route('users.index') }}" class="block px-3 py-2 rounded-xl hover:bg-slate-100">Users</a>
+            @if(auth()->user()->role?->role_name === 'Pemilik')
+                <a href="{{ route('piutang.index') }}" class="block px-3 py-2 rounded-xl hover:bg-slate-100">Piutang</a>
+                <a href="{{ route('roles.index') }}" class="block px-3 py-2 rounded-xl hover:bg-slate-100">Roles</a>
+                <a href="{{ route('users.index') }}" class="block px-3 py-2 rounded-xl hover:bg-slate-100">Users</a>
+            @endif
 
         </div>
 

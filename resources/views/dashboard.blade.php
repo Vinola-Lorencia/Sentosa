@@ -230,8 +230,7 @@
                             <thead>
                                 <tr class="border-b border-gray-200">
                                     <th class="pb-2 text-left text-xs font-medium text-gray-500">Produk</th>
-                                    <th class="pb-2 text-center text-xs font-medium text-gray-500">Stok</th>
-                                    <th class="pb-2 text-center text-xs font-medium text-gray-500">Unit</th>
+                                    <th class="pb-2 text-right text-xs font-medium text-gray-500">Stok</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -240,19 +239,14 @@
                                         <td class="py-2 text-xs text-gray-900">
                                             {{ $product->product_name }}
                                         </td>
-                                        <td class="py-2 text-center">
-                                            <span class="px-2 py-0.5 text-xs font-semibold rounded-full
-                                                {{ $product->stock <= 0 ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800' }}">
-                                                {{ $product->stock }}
-                                            </span>
-                                        </td>
-                                        <td class="py-2 text-xs text-gray-500 text-center">
-                                            {{ $product->sale_unit }}
+                                        <td class="py-2 text-right text-xs font-semibold
+                                            {{ $product->stock <= 0 ? 'text-red-600' : 'text-yellow-700' }}">
+                                            {{ $product->stok_display }}
                                         </td>
                                     </tr>
                                 @empty
                                     <tr>
-                                        <td colspan="3" class="py-2 text-xs text-gray-400 italic">
+                                        <td colspan="2" class="py-2 text-xs text-gray-400 italic">
                                             Semua stok aman.
                                         </td>
                                     </tr>
@@ -268,6 +262,194 @@
 
             </div>
 
-        </div>     
+            {{-- Produk Terbaru + Input Produk Karyawan --}}
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+
+                {{-- Produk Terbaru --}}
+                <div class="lg:col-span-2 bg-white rounded-lg shadow-sm p-4 sm:p-6">
+                    <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+                        <h3 class="text-sm font-semibold text-gray-800">Produk Terbaru</h3>
+                        <div class="flex gap-1 text-xs">
+                            @foreach(['all' => 'Semua', 'today' => 'Hari Ini', 'week' => 'Minggu Ini', 'month' => 'Bulan Ini'] as $key => $label)
+                                <a href="{{ route('dashboard', ['produk_filter' => $key]) }}"
+                                    class="px-2.5 py-1 rounded-full {{ $produkFilter === $key ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200' }}">
+                                    {{ $label }}
+                                </a>
+                            @endforeach
+                        </div>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full">
+                            <thead>
+                                <tr class="border-b border-gray-200">
+                                    <th class="pb-2 text-left text-xs font-medium text-gray-500">Produk</th>
+                                    <th class="pb-2 text-left text-xs font-medium text-gray-500">Ditambahkan Oleh</th>
+                                    <th class="pb-2 text-right text-xs font-medium text-gray-500">Tanggal</th>
+                                    <th class="pb-2 text-right text-xs font-medium text-gray-500">Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @forelse($produkTerbaru as $product)
+                                    <tr class="border-b border-gray-100 last:border-0">
+                                        <td class="py-2 text-xs text-gray-900">
+                                            {{ $product->product_name }}
+                                        </td>
+                                        <td class="py-2 text-xs text-gray-500">
+                                            {{ $product->creator->name ?? '-' }}
+                                        </td>
+                                        <td class="py-2 text-right text-xs text-gray-500 whitespace-nowrap">
+                                            {{ $product->created_at?->format('d M Y H:i') ?? '-' }}
+                                        </td>
+                                        <td class="py-2 text-right text-xs whitespace-nowrap">
+                                            <a href="{{ route('products.edit', $product->id) }}"
+                                                class="text-blue-600 hover:underline text-sm">
+                                                Edit
+                                            </a>
+                                        </td>
+                                    </tr>
+                                @empty
+                                    <tr>
+                                        <td colspan="4" class="py-2 text-xs text-gray-400 italic">
+                                            Tidak ada produk pada periode ini.
+                                        </td>
+                                    </tr>
+                                @endforelse
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                {{-- Input Produk Karyawan --}}
+                <div class="bg-white rounded-lg shadow-sm p-4 sm:p-6">
+                    <h3 class="text-sm font-semibold text-gray-800 mb-4">Input Produk Karyawan</h3>
+                    <div class="space-y-1">
+                        @forelse($inputProdukKaryawan as $item)
+                            <div class="flex items-center justify-between py-2 border-b border-gray-100 last:border-0 cursor-pointer hover:bg-gray-50 rounded-md px-1 -mx-1"
+                                data-user-id="{{ $item['user']->id }}"
+                                data-user-name="{{ $item['user']->name }}"
+                                onclick="openKaryawanProductsModal({{ $item['user']->id }}, @js($item['user']->name))">
+                                <div class="flex-1 min-w-0 mr-2">
+                                    <p class="text-xs font-semibold text-gray-900 truncate">
+                                        {{ $item['user']->name }}
+                                    </p>
+                                    <p class="text-xs text-gray-500 truncate">
+                                        Terakhir: {{ $item['produk_terakhir']->product_name ?? '-' }}
+                                    </p>
+                                </div>
+                                <span class="text-xs font-bold text-indigo-600 whitespace-nowrap">
+                                    {{ $item['jumlah_bulan_ini'] }} produk
+                                </span>
+                            </div>
+                        @empty
+                            <p class="text-xs text-gray-400 italic">Belum ada user dengan role Karyawan.</p>
+                        @endforelse
+                    </div>
+                </div>
+
+            </div>
+
+        </div>
     </div>
+
+    {{-- Modal: Produk oleh Karyawan --}}
+    <div id="karyawan-products-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+        <div class="bg-white rounded-lg shadow-lg w-full max-w-2xl max-h-[80vh] flex flex-col">
+            <div class="flex items-center justify-between p-4 sm:p-6 border-b border-gray-200">
+                <h3 class="text-sm font-semibold text-gray-800" id="karyawan-products-modal-title">
+                    Produk yang ditambahkan oleh
+                </h3>
+                <button type="button" onclick="closeKaryawanProductsModal()"
+                    class="text-gray-400 hover:text-gray-600">
+                    <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            </div>
+
+            <div class="p-4 sm:p-6 overflow-y-auto">
+                <div id="karyawan-products-modal-loading" class="text-xs text-gray-400 italic">
+                    Memuat...
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full hidden" id="karyawan-products-modal-table">
+                        <thead>
+                            <tr class="border-b border-gray-200">
+                                <th class="pb-2 text-left text-xs font-medium text-gray-500">Nama Produk</th>
+                                <th class="pb-2 text-left text-xs font-medium text-gray-500">Stok</th>
+                                <th class="pb-2 text-right text-xs font-medium text-gray-500">Tanggal</th>
+                                <th class="pb-2 text-right text-xs font-medium text-gray-500">Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody id="karyawan-products-modal-body"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-end p-4 sm:p-6 border-t border-gray-200">
+                <button type="button" onclick="closeKaryawanProductsModal()"
+                    class="px-4 py-2 text-sm text-gray-600 hover:text-gray-900">
+                    Tutup
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function openKaryawanProductsModal(userId, userName) {
+            const modal   = document.getElementById('karyawan-products-modal');
+            const title   = document.getElementById('karyawan-products-modal-title');
+            const loading = document.getElementById('karyawan-products-modal-loading');
+            const table   = document.getElementById('karyawan-products-modal-table');
+            const body    = document.getElementById('karyawan-products-modal-body');
+
+            title.textContent = `Produk yang ditambahkan oleh ${userName}`;
+            body.innerHTML = '';
+            table.classList.add('hidden');
+            loading.classList.remove('hidden');
+            modal.classList.remove('hidden');
+
+            fetch(`/api/karyawan-products/${userId}`, {
+                headers: { 'Accept': 'application/json' },
+            })
+                .then((res) => res.json())
+                .then((data) => {
+                    loading.classList.add('hidden');
+
+                    if (!data.products.length) {
+                        loading.textContent = 'Belum ada produk yang ditambahkan.';
+                        loading.classList.remove('hidden');
+                        return;
+                    }
+
+                    body.innerHTML = data.products.map((product) => `
+                        <tr class="border-b border-gray-100 last:border-0">
+                            <td class="py-2 text-xs text-gray-900">${escapeHtml(product.product_name)}</td>
+                            <td class="py-2 text-xs ${product.stock > 0 ? 'text-gray-700' : 'text-red-600'}">
+                                ${product.stock > 0 ? escapeHtml(product.stok_display) : 'Habis'}
+                            </td>
+                            <td class="py-2 text-right text-xs text-gray-500 whitespace-nowrap">${escapeHtml(product.created_at)}</td>
+                            <td class="py-2 text-right text-xs whitespace-nowrap">
+                                <a href="${product.edit_url}" class="text-blue-600 hover:underline text-sm">Edit</a>
+                            </td>
+                        </tr>
+                    `).join('');
+
+                    table.classList.remove('hidden');
+                })
+                .catch(() => {
+                    loading.textContent = 'Gagal memuat data produk.';
+                    loading.classList.remove('hidden');
+                });
+        }
+
+        function closeKaryawanProductsModal() {
+            document.getElementById('karyawan-products-modal').classList.add('hidden');
+        }
+
+        function escapeHtml(str) {
+            const div = document.createElement('div');
+            div.textContent = str ?? '';
+            return div.innerHTML;
+        }
+    </script>
 </x-app-layout>

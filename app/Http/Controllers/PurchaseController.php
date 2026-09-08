@@ -7,6 +7,7 @@ use App\Models\Purchase;
 use App\Models\PurchaseDetail;
 use App\Models\PurchaseOrder;
 use App\Models\Supplier;
+use App\Services\UnitConverter;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -98,9 +99,12 @@ class PurchaseController extends Controller
                 $detail->subtotal    = $subtotal;
                 $detail->save();
 
-                // Update stok produk
+                // Update stok produk — $qty diterima dalam satuan unit[]
+                // (mis. Lusin), stock disimpan dalam Buah, jadi harus
+                // dikonversi dulu sebelum ditambahkan.
                 $product = Product::findOrFail($productId);
-                $product->stock += $qty;
+                $buahDiterima = UnitConverter::toBaseUnit((float) $qty, $units[$i] ?? '', $product);
+                $product->stock += $buahDiterima;
                 $product->save();
             }
 
@@ -155,10 +159,11 @@ class PurchaseController extends Controller
 
         DB::transaction(function () use ($request, $purchase) {
 
-            // Kembalikan stok lama
+            // Kembalikan stok lama (dikonversi ke Buah)
             foreach ($purchase->details as $oldDetail) {
                 $product = Product::findOrFail($oldDetail->product_id);
-                $product->stock -= $oldDetail->quantity;
+                $buahLama = UnitConverter::toBaseUnit((float) $oldDetail->quantity, $oldDetail->unit ?? '', $product);
+                $product->stock -= $buahLama;
                 $product->save();
             }
 
@@ -190,9 +195,10 @@ class PurchaseController extends Controller
                 $detail->subtotal    = $subtotal;
                 $detail->save();
 
-                // Update stok baru
+                // Update stok baru (dikonversi ke Buah)
                 $product = Product::findOrFail($productId);
-                $product->stock += $qty;
+                $buahDiterima = UnitConverter::toBaseUnit((float) $qty, $units[$i] ?? '', $product);
+                $product->stock += $buahDiterima;
                 $product->save();
             }
 
@@ -214,10 +220,11 @@ class PurchaseController extends Controller
 
         DB::transaction(function () use ($purchase) {
 
-            // Kembalikan stok
+            // Kembalikan stok (dikonversi ke Buah)
             foreach ($purchase->details as $detail) {
                 $product = Product::findOrFail($detail->product_id);
-                $product->stock -= $detail->quantity;
+                $buah = UnitConverter::toBaseUnit((float) $detail->quantity, $detail->unit ?? '', $product);
+                $product->stock -= $buah;
                 $product->save();
             }
 

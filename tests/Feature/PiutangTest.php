@@ -49,7 +49,7 @@ class PiutangTest extends TestCase
             'sale_unit'            => 'Lusin',
             'purchase_unit'        => 'Dus',
             'dus_to_unit'          => 12,
-            'stock'                => 10,
+            'stock'                => 24, // 2 dozen in base units (Buah)
         ]);
 
         $this->actingAs($this->user)

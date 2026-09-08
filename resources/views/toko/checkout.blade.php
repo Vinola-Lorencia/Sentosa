@@ -15,7 +15,12 @@
                     ← Kembali ke Keranjang
                 </a>
                 <span class="font-bold text-gray-900">Checkout</span>
-                <span class="text-sm text-gray-600">{{ Auth::user()->name }}</span>
+                <div class="flex items-center gap-4">
+                    <a href="{{ route('toko.pesanan') }}" class="text-sm font-medium text-gray-600 hover:text-indigo-600">
+                        Pesanan Saya
+                    </a>
+                    <span class="text-sm text-gray-600">{{ Auth::user()->name }}</span>
+                </div>
             </div>
         </div>
     </nav>

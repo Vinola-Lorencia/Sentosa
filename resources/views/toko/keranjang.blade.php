@@ -18,7 +18,12 @@
                     </a>
                 </div>
                 <span class="font-bold text-gray-900">Keranjang Belanja</span>
-                <span class="text-sm text-gray-600">{{ Auth::user()->name }}</span>
+                <div class="flex items-center gap-4">
+                    <a href="{{ route('toko.pesanan') }}" class="text-sm font-medium text-gray-600 hover:text-indigo-600">
+                        Pesanan Saya
+                    </a>
+                    <span class="text-sm text-gray-600">{{ Auth::user()->name }}</span>
+                </div>
             </div>
         </div>
     </nav>
@@ -73,6 +78,7 @@
                                             value="{{ $item['quantity'] }}"
                                             min="0.25" step="0.25"
                                             class="w-20 text-sm border-gray-300 rounded-md shadow-sm text-center">
+                                        <span class="text-xs text-gray-500">{{ $item['unit'] }}</span>
                                         <button type="submit"
                                             class="text-xs text-indigo-600 hover:text-indigo-800">
                                             Update

@@ -130,15 +130,21 @@
                                                 </select>
                                             </td>
                                             <td class="px-4 py-3">
-                                                <span class="stock-display text-sm text-gray-500">-</span>
+                                                <span class="stock-display block w-28 text-sm text-gray-500">-</span>
                                             </td>
                                             <td class="px-4 py-3">
                                                 <input type="number" name="quantity[]" min="0.25" step="0.25" value="1"
                                                     class="qty-input w-24 border-gray-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
                                             </td>
                                             <td class="px-4 py-3">
-                                                <input type="text" name="unit[]"
+                                                <select name="unit[]"
                                                     class="unit-input w-24 border-gray-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                                                    <option value="Buah">Buah</option>
+                                                    <option value="Lusin">Lusin</option>
+                                                    <option value="Kodi">Kodi</option>
+                                                    <option value="Gross">Gross</option>
+                                                    <option value="Set">Set</option>
+                                                </select>
                                             </td>
                                             <td class="px-4 py-3">
                                                 <input type="number" step="0.01" name="price[]"
@@ -202,6 +208,7 @@
                 price: {{ (float) $product->sale_price }},
                 unit:  "{{ addslashes($product->sale_unit) }}",
                 stock: {{ (float) $product->stock }},
+                stockDisplay: "{{ addslashes($product->stok_display) }}",
             },
             @endforeach
         };
@@ -211,6 +218,18 @@
             <option value="{{ $product->id }}">{{ addslashes($product->product_name) }}</option>
             @endforeach
         `;
+
+        // Mirrors App\Services\UnitConverter::UNIT_TO_BASE on the backend.
+        const UNIT_TO_BASE = {
+            buah: 1,
+            pcs: 1,
+            biji: 1,
+            pak: 10,
+            set: 6,
+            lusin: 12,
+            kodi: 20,
+            gross: 144,
+        };
     </script>
 
     <script>
@@ -268,6 +287,36 @@
                 row.querySelectorAll('.qty-input, .price-input, .discount-input').forEach(input => {
                     input.addEventListener('input', () => updateSubtotal(row));
                 });
+                row.querySelector('.unit-input').addEventListener('change', () => applyUnitConversion(row));
+            }
+
+            // ─── Konversi harga saat satuan diganti ─────────────────────────────
+            // Harga selalu dihitung ulang dari harga & satuan asli produk (bukan
+            // dari harga yang sedang tampil), supaya tidak ada drift kalau satuan
+            // diganti-ganti berkali-kali dan supaya kembali ke satuan jual selalu
+            // menghasilkan harga yang sama persis dengan semula.
+            function applyUnitConversion(row) {
+                const productId = row.dataset.productId;
+                if (!productId) return;
+
+                const data = productData[productId];
+                if (!data) return;
+
+                const typedUnit = row.querySelector('.unit-input').value.trim().toLowerCase();
+                const saleUnit  = data.unit.trim().toLowerCase();
+
+                const typedFactor = UNIT_TO_BASE[typedUnit];
+                const saleFactor  = UNIT_TO_BASE[saleUnit];
+
+                // Hanya konversi otomatis kalau kedua satuan dikenal di UNIT_TO_BASE
+                // (Lusin, Kodi, Gross, Pak, Set, Buah/Pcs/Biji). Satuan lain (mis.
+                // Dus, Goni, Karton, atau ketikan bebas) dibiarkan manual.
+                if (!typedFactor || !saleFactor) return;
+
+                const newPrice = data.price * (typedFactor / saleFactor);
+                row.querySelector('.price-input').value = Math.round(newPrice * 100) / 100;
+
+                updateSubtotal(row);
             }
 
             // ─── TomSelect ────────────────────────────────────────────────────
@@ -279,13 +328,17 @@
                     create: false,
                     sortField: { field: 'text', direction: 'asc' },
                     onChange(value) {
-                        if (!value) return;
+                        if (!value) {
+                            delete row.dataset.productId;
+                            return;
+                        }
                         const data = productData[value];
                         if (!data) return;
 
+                        row.dataset.productId = value;
                         row.querySelector('.price-input').value         = data.price;
                         row.querySelector('.unit-input').value          = data.unit;
-                        row.querySelector('.stock-display').textContent = data.stock;
+                        row.querySelector('.stock-display').textContent = data.stockDisplay;
 
                         requestAnimationFrame(() => updateSubtotal(row));
                     }
@@ -312,15 +365,21 @@
                         </select>
                     </td>
                     <td class="px-4 py-3">
-                        <span class="stock-display text-sm text-gray-500">-</span>
+                        <span class="stock-display block w-28 text-sm text-gray-500">-</span>
                     </td>
                     <td class="px-4 py-3">
                         <input type="number" name="quantity[]" min="0.25" step="0.25" value="1"
                             class="qty-input w-24 border-gray-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
                     </td>
                     <td class="px-4 py-3">
-                        <input type="text" name="unit[]"
+                        <select name="unit[]"
                             class="unit-input w-24 border-gray-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                            <option value="Buah">Buah</option>
+                            <option value="Lusin">Lusin</option>
+                            <option value="Kodi">Kodi</option>
+                            <option value="Gross">Gross</option>
+                            <option value="Set">Set</option>
+                        </select>
                     </td>
                     <td class="px-4 py-3">
                         <input type="number" step="0.01" name="price[]"

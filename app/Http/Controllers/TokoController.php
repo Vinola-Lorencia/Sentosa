@@ -6,6 +6,7 @@ use App\Models\Customer;
 use App\Models\Product;
 use App\Models\Sale;
 use App\Models\SaleDetail;
+use App\Services\UnitConverter;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -47,31 +48,40 @@ class TokoController extends Controller
         $request->validate([
             'product_id' => 'required|exists:products,id',
             'quantity'   => 'required|numeric|min:0.25',
+            'unit'       => 'required|in:Buah,Lusin,Kodi,Gross',
         ]);
 
         $product   = Product::findOrFail($request->product_id);
         $keranjang = Session::get('keranjang', []);
         $key       = 'product_' . $product->id;
 
-        if (isset($keranjang[$key])) {
-            $keranjang[$key]['quantity'] += $request->quantity;
-        } else {
-            $keranjang[$key] = [
-                'product_id'   => $product->id,
-                'product_name' => $product->product_name,
-                'unit'         => $product->sale_unit,
-                'price'        => $product->sale_price,
-                'quantity'     => $request->quantity,
-                'subtotal'     => 0,
-            ];
+        // sale_price is quoted per sale_unit, so the cart always keeps
+        // quantity/unit in sale_unit terms (same convention as
+        // WhatsAppController::convertUnit()) regardless of which unit the
+        // customer picked in the dropdown — route through true base units
+        // so quantities from different chosen units merge correctly.
+        $baseQtyToAdd = UnitConverter::toBaseUnit((float) $request->quantity, $request->unit, $product);
+
+        $existingBaseQty = isset($keranjang[$key])
+            ? UnitConverter::toBaseUnit((float) $keranjang[$key]['quantity'], $keranjang[$key]['unit'], $product)
+            : 0.0;
+
+        $totalBaseQty = $existingBaseQty + $baseQtyToAdd;
+
+        if ($totalBaseQty > $product->stock) {
+            return back()->with('error', "Stok {$product->product_name} tidak mencukupi. Stok tersedia: {$product->stok_display}");
         }
 
-        $keranjang[$key]['subtotal'] = $keranjang[$key]['quantity'] * $keranjang[$key]['price'];
+        $qtyInSaleUnit = UnitConverter::fromBaseUnit($totalBaseQty, $product->sale_unit, $product);
 
-        // Cek stok
-        if ($keranjang[$key]['quantity'] > $product->stock) {
-            return back()->with('error', "Stok {$product->product_name} tidak mencukupi. Stok tersedia: {$product->stock} {$product->sale_unit}");
-        }
+        $keranjang[$key] = [
+            'product_id'   => $product->id,
+            'product_name' => $product->product_name,
+            'unit'         => $product->sale_unit,
+            'price'        => (float) $product->sale_price,
+            'quantity'     => $qtyInSaleUnit,
+            'subtotal'     => $qtyInSaleUnit * (float) $product->sale_price,
+        ];
 
         Session::put('keranjang', $keranjang);
 
@@ -93,8 +103,13 @@ class TokoController extends Controller
             } else {
                 $product = Product::findOrFail($id);
 
-                if ($request->quantity > $product->stock) {
-                    return back()->with('error', "Stok tidak mencukupi. Tersedia: {$product->stock} {$product->sale_unit}");
+                // Cart quantity is stored in sale_unit terms — convert to
+                // true base units before comparing against stock (also
+                // stored in base/Buah units).
+                $baseQty = UnitConverter::toBaseUnit((float) $request->quantity, $keranjang[$key]['unit'], $product);
+
+                if ($baseQty > $product->stock) {
+                    return back()->with('error', "Stok tidak mencukupi. Tersedia: {$product->stok_display}");
                 }
 
                 $keranjang[$key]['quantity'] = $request->quantity;
@@ -182,7 +197,7 @@ class TokoController extends Controller
                 $detail->save();
 
                 $product = Product::findOrFail($item['product_id']);
-                $product->stock -= $item['quantity'];
+                $product->stock -= UnitConverter::toBaseUnit((float) $item['quantity'], $item['unit'], $product);
                 $product->save();
             }
 
@@ -200,11 +215,15 @@ class TokoController extends Controller
     {
         $lastOrderId = Session::get('last_order_id');
 
+        // Sales made through the storefront always carry the checkout
+        // user's own id (set in prosesCheckout()), so filtering by user_id
+        // is a direct, reliable link — no need to fall back to matching
+        // customers by phone/name, which the `users` table doesn't even
+        // have a phone column for.
         $pesanan = Sale::with('details.product')
             ->where('user_id', Auth::id())
-            ->latest('sale_id')
-            ->take(10)
-            ->get();
+            ->latest('created_at')
+            ->paginate(10);
 
         return view('toko.pesanan', compact('pesanan', 'lastOrderId'));
     }

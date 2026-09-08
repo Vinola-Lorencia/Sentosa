@@ -84,20 +84,33 @@
 
                         <div>
                             <x-input-label for="sale_unit" :value="__('Sale Unit')" />
-                            <x-text-input id="sale_unit" name="sale_unit" type="text" class="mt-1 block w-full" value="{{ old('sale_unit', $product->sale_unit) }}" required />
+                            <select id="sale_unit" name="sale_unit"
+                                class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                required>
+                                <option value="">-- Pilih Sale Unit --</option>
+                                @foreach(['Buah', 'Lusin', 'Kodi', 'Gross', 'Set'] as $option)
+                                    <option value="{{ $option }}"
+                                        {{ strtolower(old('sale_unit', $product->sale_unit)) === strtolower($option) ? 'selected' : '' }}>
+                                        {{ $option }}
+                                    </option>
+                                @endforeach
+                            </select>
                             <x-input-error :messages="$errors->get('sale_unit')" class="mt-2" />
                         </div>
 
                         <div>
-                            <x-input-label for="units_per_sale_unit" :value="__('Jumlah per Unit Jual')" />
-                            <x-text-input id="units_per_sale_unit" name="units_per_sale_unit" type="number" min="1" class="mt-1 block w-full" value="{{ old('units_per_sale_unit', $product->units_per_sale_unit) }}" required />
-                            <p class="text-xs text-gray-500 mt-1">Contoh: jika satuan jual = lusin, isi 12. Jika satuan jual = buah, isi 1.</p>
-                            <x-input-error :messages="$errors->get('units_per_sale_unit')" class="mt-2" />
-                        </div>
-
-                        <div>
                             <x-input-label for="purchase_unit" :value="__('Purchase Unit')" />
-                            <x-text-input id="purchase_unit" name="purchase_unit" type="text" class="mt-1 block w-full" value="{{ old('purchase_unit', $product->purchase_unit) }}" required />
+                            <select id="purchase_unit" name="purchase_unit"
+                                class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                required>
+                                <option value="">-- Pilih Purchase Unit --</option>
+                                @foreach(['Dus', 'Goni', 'Karton', 'Ikat'] as $option)
+                                    <option value="{{ $option }}"
+                                        {{ strtolower(old('purchase_unit', $product->purchase_unit)) === strtolower($option) ? 'selected' : '' }}>
+                                        {{ $option }}
+                                    </option>
+                                @endforeach
+                            </select>
                             <x-input-error :messages="$errors->get('purchase_unit')" class="mt-2" />
                         </div>
 
@@ -109,7 +122,7 @@
 
                         <div>
                             <x-input-label for="stock" :value="__('Stock')" />
-                            <x-text-input id="stock" name="stock" type="number" class="mt-1 block w-full" value="{{ old('stock', $product->stock) }}" required />
+                            <x-text-input id="stock" name="stock" type="number" step="any" class="mt-1 block w-full" value="{{ old('stock', $product->stock) }}" required />
                             <x-input-error :messages="$errors->get('stock')" class="mt-2" />
                         </div>
 

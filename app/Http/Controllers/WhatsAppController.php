@@ -852,9 +852,18 @@ Balas dalam format JSON:
      */
     private function convertUnit(float $customerQty, string $customerUnit, Product $product): array
     {
-        $convertedQty = UnitConverter::toBaseUnit($customerQty, $customerUnit, $product);
-        $unitUsed     = $product->sale_unit ?: $customerUnit;
-        $subtotal     = (float) $product->sale_price * $convertedQty;
+        $unitUsed = $product->sale_unit ?: $customerUnit;
+
+        // sale_price is quoted per sale_unit, so the quantity multiplied
+        // against it (and stored on SaleDetail) must stay in sale_unit
+        // terms — not the true base/Buah quantity UnitConverter::toBaseUnit
+        // now returns. Route through true base units then back out to
+        // sale_unit terms so this stays correct regardless of which unit
+        // the customer actually ordered in.
+        $qtyInBase    = UnitConverter::toBaseUnit($customerQty, $customerUnit, $product);
+        $convertedQty = UnitConverter::fromBaseUnit($qtyInBase, $unitUsed, $product);
+
+        $subtotal = (float) $product->sale_price * $convertedQty;
 
         return [$convertedQty, $unitUsed, (float) $product->sale_price, $subtotal];
     }

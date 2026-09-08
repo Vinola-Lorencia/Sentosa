@@ -31,11 +31,11 @@ class AuthenticatedSessionController extends Controller
         // ✅ Cek role dulu sebelum redirect
         $user = auth()->user();
 
-        if ($user->role?->role_name === 'Pembeli') {
-            return redirect()->intended(route('toko.index'));
-        }
-
-        return redirect()->intended(route('dashboard', absolute: false));
+        return match ($user->role?->role_name) {
+            'Pembeli'  => redirect()->intended(route('toko.index')),
+            'Karyawan' => redirect()->intended(route('products.index')),
+            default    => redirect()->intended(route('dashboard', absolute: false)),
+        };
     }
 
     /**

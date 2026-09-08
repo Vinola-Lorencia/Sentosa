@@ -17,6 +17,10 @@
                     <span class="font-bold text-gray-900">Toko Sentosa</span>
                 </div>
                 <div class="flex items-center gap-4">
+                    <a href="{{ route('toko.pesanan') }}"
+                       class="text-sm font-medium text-gray-600 hover:text-indigo-600">
+                        Pesanan Saya
+                    </a>
                     <a href="{{ route('toko.keranjang') }}"
                        class="relative inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 rounded-md text-sm font-medium text-white hover:bg-indigo-500">
                         🛒 Keranjang
@@ -98,7 +102,7 @@
                             Rp {{ number_format($product->sale_price, 0, ',', '.') }}
                         </p>
                         <p class="text-xs text-gray-500 mb-3">
-                            per {{ $product->sale_unit }} | Stok: {{ $product->stock }}
+                            Stok: {{ $product->stok_display }}
                         </p>
 
                         <form action="{{ route('toko.keranjang.tambah') }}" method="POST">
@@ -108,7 +112,15 @@
                                 <input type="number" name="quantity"
                                     min="0.25" step="0.25" value="1"
                                     class="w-20 text-sm border-gray-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
-                                <span class="text-xs text-gray-500">{{ $product->sale_unit }}</span>
+                                <select name="unit"
+                                    class="text-sm border-gray-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                                    @foreach(['Buah', 'Lusin', 'Kodi', 'Gross'] as $option)
+                                        <option value="{{ $option }}"
+                                            {{ strtolower($product->sale_unit) === strtolower($option) ? 'selected' : '' }}>
+                                            {{ $option }}
+                                        </option>
+                                    @endforeach
+                                </select>
                             </div>
                             <button type="submit"
                                 class="w-full py-2 bg-indigo-600 text-white text-xs font-semibold rounded-md hover:bg-indigo-500">

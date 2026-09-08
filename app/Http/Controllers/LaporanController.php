@@ -25,12 +25,13 @@ class LaporanController extends Controller
         $startDate = $request->start_date ?? Carbon::now()->startOfMonth()->format('Y-m-d');
         $endDate   = $request->end_date   ?? Carbon::now()->endOfMonth()->format('Y-m-d');
 
-        $sales = Sale::with('customer')
+        $sales = Sale::with('customer', 'details.product')
             ->whereBetween('sale_date', [$startDate, $endDate])
             ->orderBy('sale_date', 'asc')
             ->get();
 
-        $total = $sales->sum('total_amount');
+        $total     = $sales->sum('total_amount');
+        $labaTotal = $sales->sum('laba');
 
         // ✅ Omset per customer
         $omsetPerCustomer = Customer::select('customers.*')
@@ -63,6 +64,7 @@ class LaporanController extends Controller
         return view('laporan.penjualan', compact(
             'sales',
             'total',
+            'labaTotal',
             'startDate',
             'endDate',
             'omsetPerCustomer',

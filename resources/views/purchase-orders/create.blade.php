@@ -355,7 +355,7 @@
 
                 sale_unit: "{{ addslashes($product->sale_unit) }}",
 
-                conversion: {{ (int) $product->dus_to_unit }}
+                conversion: {{ (float) $product->dus_to_unit }}
 
             },
 

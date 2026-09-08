@@ -26,6 +26,12 @@ Route::get('/dashboard', [DashboardController::class, 'index'])
     ->middleware(['auth', 'role:Pemilik'])
     ->name('dashboard');
 
+Route::get('/api/check-product-name', [ProductController::class, 'checkProductName'])
+    ->middleware('auth');
+
+Route::get('/api/karyawan-products/{userId}', [ProductController::class, 'byKaryawan'])
+    ->middleware(['auth', 'role:Pemilik']);
+
 Route::middleware('auth')->group(function () {
 
     // ─── Profile (semua role) ─────────────────────────────────────────────────
@@ -45,8 +51,22 @@ Route::middleware('auth')->group(function () {
         Route::get('pesanan', [TokoController::class, 'pesanan'])->name('pesanan');
     });
 
-    // ─── Route Pemilik & Karyawan ─────────────────────────────────────────────
+    // ─── Route Pemilik & Karyawan (Produk & Penjualan, tanpa hapus) ────────────
     Route::middleware('role:Pemilik,Karyawan')->group(function () {
+        Route::resource('products', ProductController::class)->except(['show', 'destroy']);
+        Route::patch('products/{product}/photo', [ProductController::class, 'updatePhoto'])->name('products.update-photo');
+
+        Route::patch('sales/{id}/tandai-diproses', [SaleController::class, 'tandaiDiproses'])->name('sales.tandai-diproses');
+        Route::resource('sales', SaleController::class)->except(['destroy']);
+    });
+
+    // ─── Route Karyawan saja ────────────────────────────────────────────────────
+    Route::get('/my-products', [ProductController::class, 'myProducts'])
+        ->name('products.my')
+        ->middleware('role:Karyawan');
+
+    // ─── Route Pemilik saja ───────────────────────────────────────────────────
+    Route::middleware('role:Pemilik')->group(function () {
 
         // Custom routes SEBELUM resource
         Route::get('purchase-orders/{id}/items', [PurchaseOrderController::class, 'getItems'])->name('purchase-orders.items');
@@ -59,18 +79,13 @@ Route::middleware('auth')->group(function () {
         Route::delete('piutang/{id}', [PiutangController::class, 'destroy'])->name('piutang.destroy');
 
         // Transaksi
-        Route::patch('sales/{id}/tandai-diproses', [SaleController::class, 'tandaiDiproses'])->name('sales.tandai-diproses');
-        Route::resource('sales', SaleController::class);
+        Route::delete('sales/{sale}', [SaleController::class, 'destroy'])->name('sales.destroy');
         Route::resource('purchases', PurchaseController::class);
         Route::resource('purchase-orders', PurchaseOrderController::class);
         Route::resource('pengiriman', PengirimanController::class);
-        Route::resource('products', ProductController::class)->except(['show']);
+        Route::delete('products/{product}', [ProductController::class, 'destroy'])->name('products.destroy');
         Route::resource('customers', CustomerController::class)->except(['show']);
         Route::resource('suppliers', SupplierController::class)->except(['show']);
-    });
-
-    // ─── Route Pemilik saja ───────────────────────────────────────────────────
-    Route::middleware('role:Pemilik')->group(function () {
 
         // Master data sensitif
         Route::resource('roles', RoleController::class)->except(['show']);

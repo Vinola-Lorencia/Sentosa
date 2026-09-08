@@ -56,7 +56,7 @@ class SaleTest extends TestCase
             'sale_unit'            => 'Lusin',
             'purchase_unit'        => 'Dus',
             'dus_to_unit'          => 12,
-            'stock'                => 10,
+            'stock'                => 24, // 2 dozen in base units (Buah)
         ]);
 
         $response = $this->actingAs($this->user)
@@ -78,8 +78,8 @@ class SaleTest extends TestCase
             'payment_status' => 'Lunas',
         ]);
 
-        // Stok berkurang
-        $this->assertEquals(9, $product->fresh()->stock);
+        // Stok berkurang 12 (1 Lusin = 12 Buah), bukan 1
+        $this->assertEquals(12, $product->fresh()->stock);
     }
 
     public function test_cannot_create_sale_if_stock_insufficient()
@@ -123,10 +123,10 @@ class SaleTest extends TestCase
             'sale_unit'            => 'Lusin',
             'purchase_unit'        => 'Dus',
             'dus_to_unit'          => 12,
-            'stock'                => 10,
+            'stock'                => 36, // 3 dozen in base units (Buah)
         ]);
 
-        // Buat sale dulu
+        // Buat sale dulu (2 Lusin = 24 Buah)
         $this->actingAs($this->user)
             ->post(route('sales.store'), [
                 'sale_date'      => now()->format('Y-m-d'),
@@ -145,7 +145,7 @@ class SaleTest extends TestCase
         $this->actingAs($this->user)
             ->delete(route('sales.destroy', $sale->sale_id));
 
-        // Stok kembali ke 10
-        $this->assertEquals(10, $product->fresh()->stock);
+        // Stok kembali ke 36
+        $this->assertEquals(36, $product->fresh()->stock);
     }
 }

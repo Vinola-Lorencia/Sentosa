@@ -54,7 +54,7 @@ Route::middleware('auth')->group(function () {
     // ─── Route Pemilik & Karyawan (Produk & Penjualan, tanpa hapus) ────────────
     Route::middleware('role:Pemilik,Karyawan')->group(function () {
         Route::resource('products', ProductController::class)->except(['show', 'destroy']);
-        Route::patch('products/{product}/photo', [ProductController::class, 'updatePhoto'])->name('products.update-photo');
+        Route::match(['post', 'patch'], 'products/{product}/photo', [ProductController::class, 'updatePhoto'])->name('products.update-photo');
 
         Route::patch('sales/{id}/tandai-diproses', [SaleController::class, 'tandaiDiproses'])->name('sales.tandai-diproses');
         Route::resource('sales', SaleController::class)->except(['destroy']);

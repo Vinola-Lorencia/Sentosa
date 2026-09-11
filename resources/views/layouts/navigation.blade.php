@@ -1,4 +1,4 @@
-﻿<nav x-data="{ open: false }" class="h-full">
+<div x-data="{ sidebarOpen: false }">
 
     <!-- STYLE UNTUK ALPINE CLOAK -->
     <style>
@@ -6,34 +6,54 @@
     </style>
 
     <!-- MOBILE TOP BAR -->
-    <div class="flex items-center justify-between px-4 py-3 border-b border-gray-200 lg:hidden bg-white">
+    <div class="flex items-center justify-between px-4 py-3 border-b border-gray-200 lg:hidden bg-white sticky top-0 z-20">
         <a href="{{ route('dashboard') }}" class="inline-flex items-center gap-3">
             <img src="{{ asset('images/logo.jpeg') }}" alt="Toko Sentosa"
                 class="h-10 w-10 rounded-xl object-cover">
             <span class="text-lg font-semibold text-slate-900">Sentosa</span>
         </a>
 
-        <button @click="open = !open"
+        <button @click="sidebarOpen = !sidebarOpen"
             class="inline-flex items-center justify-center p-2 rounded-md text-slate-500 hover:text-slate-900 hover:bg-slate-100 focus:outline-none">
 
             <!-- ICON MENU -->
             <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path :class="{ 'hidden': open, 'inline-flex': !open }" class="inline-flex"
+                <path :class="{ 'hidden': sidebarOpen, 'inline-flex': !sidebarOpen }" class="inline-flex"
                     stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                     d="M4 6h16M4 12h16M4 18h16"></path>
 
-                <path :class="{ 'hidden': !open, 'inline-flex': open }" class="hidden"
+                <path :class="{ 'hidden': !sidebarOpen, 'inline-flex': sidebarOpen }" class="hidden"
                     stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                     d="M6 18L18 6M6 6l12 12"></path>
             </svg>
         </button>
     </div>
 
-    <!-- DESKTOP SIDEBAR -->
-    <aside class="hidden lg:flex lg:flex-col h-full bg-white border-r border-gray-200">
+    <!-- OVERLAY (mobile only, shown while sidebar is open) -->
+    <div x-show="sidebarOpen" x-cloak
+        @click="sidebarOpen = false"
+        x-transition:enter="transition-opacity ease-linear duration-200"
+        x-transition:enter-start="opacity-0"
+        x-transition:enter-end="opacity-100"
+        x-transition:leave="transition-opacity ease-linear duration-150"
+        x-transition:leave-start="opacity-100"
+        x-transition:leave-end="opacity-0"
+        class="fixed inset-0 z-30 bg-black/50 lg:hidden">
+    </div>
+
+    <!-- SIDEBAR — fixed at every breakpoint: off-canvas + slide-in on mobile
+         (toggled by sidebarOpen), always visible on desktop (lg:translate-x-0).
+         The main content column reserves space for it via lg:ml-64 instead of
+         relying on normal document flow, so this never needs to leave
+         `fixed` positioning between breakpoints. -->
+    <aside
+        :class="sidebarOpen ? 'translate-x-0' : '-translate-x-full'"
+        class="fixed inset-y-0 left-0 z-40 w-64 flex flex-col bg-white border-r border-gray-200
+            transform transition-transform duration-200 ease-in-out
+            lg:translate-x-0">
 
         <!-- LOGO -->
-        <div class="flex h-20 items-center px-6 border-b border-gray-200">
+        <div class="flex h-20 items-center justify-between px-6 border-b border-gray-200">
             <a href="{{ route('dashboard') }}" class="flex items-center gap-3">
                 <img src="{{ asset('images/logo.jpeg') }}"
                     class="h-10 w-10 rounded-xl object-cover">
@@ -43,10 +63,17 @@
                     <p class="text-xs text-slate-500">Sistem Inventaris</p>
                 </div>
             </a>
+
+            <!-- Close button (mobile only) -->
+            <button @click="sidebarOpen = false" class="lg:hidden text-slate-400 hover:text-slate-700">
+                <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+            </button>
         </div>
 
         <!-- MENU -->
-        <div class="flex-1 overflow-y-auto px-4 py-6 space-y-6">
+        <div class="flex-1 overflow-y-auto px-4 py-6 space-y-6" @click="sidebarOpen = false">
 
             <!-- STOCK -->
             <div>
@@ -227,33 +254,4 @@
 
     </aside>
 
-    <!-- MOBILE MENU -->
-    <div x-show="open" x-cloak class="lg:hidden bg-white border-b border-gray-200">
-
-        <div class="px-4 py-4 space-y-2">
-
-            @if(auth()->user()->role?->role_name === 'Pemilik')
-                <a href="{{ route('dashboard') }}" class="block px-3 py-2 rounded-xl hover:bg-slate-100">Dashboard</a>
-            @endif
-            <a href="{{ route('products.index') }}" class="block px-3 py-2 rounded-xl hover:bg-slate-100">Products</a>
-            @if(auth()->user()->role?->role_name === 'Karyawan')
-                <a href="{{ route('products.my') }}" class="block px-3 py-2 rounded-xl hover:bg-slate-100">Produk Saya</a>
-            @endif
-            @if(auth()->user()->role?->role_name === 'Pemilik')
-                <a href="{{ route('suppliers.index') }}" class="block px-3 py-2 rounded-xl hover:bg-slate-100">Suppliers</a>
-                <a href="{{ route('customers.index') }}" class="block px-3 py-2 rounded-xl hover:bg-slate-100">Customers</a>
-                <a href="{{ route('purchase-orders.index') }}" class="block px-3 py-2 rounded-xl hover:bg-slate-100">Purchase Orders</a>
-                <a href="{{ route('purchases.index') }}" class="block px-3 py-2 rounded-xl hover:bg-slate-100">Purchases</a>
-            @endif
-            <a href="{{ route('sales.index') }}" class="block px-3 py-2 rounded-xl hover:bg-slate-100">Sales</a>
-            @if(auth()->user()->role?->role_name === 'Pemilik')
-                <a href="{{ route('piutang.index') }}" class="block px-3 py-2 rounded-xl hover:bg-slate-100">Piutang</a>
-                <a href="{{ route('roles.index') }}" class="block px-3 py-2 rounded-xl hover:bg-slate-100">Roles</a>
-                <a href="{{ route('users.index') }}" class="block px-3 py-2 rounded-xl hover:bg-slate-100">Users</a>
-            @endif
-
-        </div>
-
-    </div>
-
-</nav>
+</div>

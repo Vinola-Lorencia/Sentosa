@@ -18,21 +18,23 @@
         <!-- Scripts -->
         @vite(['resources/css/app.css', 'resources/js/app.js'])
     </head>
-    <body class="font-sans antialiased" style="background-color:#f8f9fa;">
-        <div style="display:flex; min-height:100vh;">
+    <body class="font-sans antialiased bg-gray-50">
+        <div class="min-h-screen">
             @include('layouts.navigation')
 
-            <div style="flex:1; display:flex; flex-direction:column; overflow:hidden;">
+            {{-- Main content: full-width on mobile (sidebar is off-canvas), offset
+                 by the sidebar's fixed width (w-64 = ml-64) from lg upward. --}}
+            <div class="flex flex-col min-h-screen w-full lg:ml-64">
                 @isset($header)
-                    <header style="background-color:#fff; border-bottom:1px solid #e0e0e0; padding:1.5rem 0;">
-                        <div style="max-width:1280px; margin:0 auto; padding:0 1rem;">
+                    <header class="bg-white border-b border-gray-200 py-6">
+                        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                             {{ $header }}
                         </div>
                     </header>
                 @endisset
 
-                <main style="flex:1; overflow-y:auto; padding:1.5rem;">
-                    <div style="max-width:1280px; margin:0 auto;">
+                <main class="flex-1 overflow-y-auto p-4 sm:p-6">
+                    <div class="max-w-7xl mx-auto">
                         {{ $slot }}
                     </div>
                 </main>

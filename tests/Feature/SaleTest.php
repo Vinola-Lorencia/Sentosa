@@ -96,7 +96,8 @@ class SaleTest extends TestCase
             'stock'                => 1,
         ]);
 
-        $this->actingAs($this->user)
+        $response = $this->actingAs($this->user)
+            ->from(route('sales.create'))
             ->post(route('sales.store'), [
                 'sale_date'      => now()->format('Y-m-d'),
                 'payment_method' => 'Cash',
@@ -108,8 +109,39 @@ class SaleTest extends TestCase
                 'unit'           => ['Lusin'],
             ]);
 
-        // Stok tidak berubah
+        // Redirect back to the form (not the index) with a specific error —
+        // nothing is silently swallowed.
+        $response->assertRedirect(route('sales.create'));
+        $response->assertSessionHas('error');
+        $this->assertStringContainsString('Produk Test', session('error'));
+        $this->assertStringContainsString('tidak mencukupi', session('error'));
+
+        // Stok tidak berubah, dan tidak ada sale/detail yang tersimpan.
         $this->assertEquals(1, $product->fresh()->stock);
+        $this->assertDatabaseCount('sales', 0);
+        $this->assertDatabaseCount('sale_details', 0);
+
+        // withInput() flashed the whole form — old() must repopulate every
+        // item row on the next render of the create form, not just leave
+        // the user with a single blank row to start over from.
+        $response->assertSessionHasInput([
+            'product_id.0' => (string) $product->id,
+            'quantity.0'   => '5',
+            'price.0'      => '15000',
+            'unit.0'       => 'Lusin',
+        ]);
+
+        $formResponse = $this->actingAs($this->user)->get(route('sales.create'));
+        $formResponse->assertStatus(200);
+        $formResponse->assertSee('value="5"', false);
+        $formResponse->assertSee('value="15000"', false);
+
+        // The failing product's <option> must carry `selected` so the
+        // dropdown itself (not just the qty/price inputs) survives the redirect.
+        $this->assertMatchesRegularExpression(
+            '/<option value="' . $product->id . '"[^>]*selected/',
+            $formResponse->getContent()
+        );
     }
 
     public function test_can_delete_sale_and_restore_stock()

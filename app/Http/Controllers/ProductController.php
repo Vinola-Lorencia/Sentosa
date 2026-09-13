@@ -145,19 +145,47 @@ class ProductController extends Controller
 
     public function byKaryawan(int $userId)
     {
+        // Covers both activity types this karyawan can have on a product:
+        // creating it (created_by) and uploading/replacing its photo
+        // (updated_by) — including old pre-existing products they didn't
+        // create. A product they both created and later re-photographed
+        // still appears once (OR, not UNION of two lists).
         $products = Product::where('created_by', $userId)
-            ->latest('created_at')
-            ->get(['id', 'product_name', 'stock', 'created_at']);
+            ->orWhere('updated_by', $userId)
+            ->latest('updated_at')
+            ->get(['id', 'product_name', 'stock', 'created_at', 'updated_at', 'created_by', 'updated_by']);
 
         return response()->json([
-            'products' => $products->map(fn ($product) => [
-                'id'           => $product->id,
-                'product_name' => $product->product_name,
-                'stock'        => (float) $product->stock,
-                'stok_display' => $product->stok_display,
-                'created_at'   => $product->created_at?->format('d M Y H:i') ?? '-',
-                'edit_url'     => route('products.edit', $product->id),
-            ]),
+            'products' => $products->map(function ($product) use ($userId) {
+                // If this user's most recent action on the product was the
+                // photo update (updated_by = them), show that; otherwise it's
+                // their "added it" entry. When they didn't create the row
+                // themselves (created_by is someone else, or null for legacy
+                // GM-seeded rows), a matching updated_by is unambiguously a
+                // photo activity — no need to compare timestamps at all,
+                // which also sidesteps both the NULL created_at crash (bulk
+                // DB::table()->insert() never sets it) and second-precision
+                // timestamp ties when a product is created and immediately
+                // photo-updated within the same second.
+                $isPhotoActivity = $product->updated_by === $userId
+                    && (
+                        $product->created_by !== $userId
+                        || $product->created_at === null
+                        || $product->updated_at?->gt($product->created_at)
+                    );
+
+                $activityAt = $isPhotoActivity ? $product->updated_at : $product->created_at;
+
+                return [
+                    'id'           => $product->id,
+                    'product_name' => $product->product_name,
+                    'stock'        => (float) $product->stock,
+                    'stok_display' => $product->stok_display,
+                    'activity'     => $isPhotoActivity ? 'Mengubah Foto' : 'Menambah Produk',
+                    'created_at'   => $activityAt?->format('d M Y H:i') ?? '-',
+                    'edit_url'     => route('products.edit', $product->id),
+                ];
+            }),
         ]);
     }
 
@@ -205,6 +233,12 @@ class ProductController extends Controller
 
     public function destroy(Product $product)
     {
+        // Cek apakah produk sudah pernah ditransaksikan
+        if ($product->saleDetails()->exists() || $product->purchaseDetails()->exists()) {
+            return redirect()->route('products.index')
+                ->with('error', 'Produk tidak dapat dihapus karena sudah tercatat dalam transaksi penjualan.');
+        }
+
         // Hapus gambar saat produk dihapus
         if ($product->image_path) {
             $this->supabaseStorage->delete($product->image_path);
@@ -225,6 +259,7 @@ class ProductController extends Controller
 
         $product->update([
             'image_path' => $this->storeProductPhoto($request->file('image'), $product->image_path),
+            'updated_by' => auth()->id(),
         ]);
 
         return response()->json([

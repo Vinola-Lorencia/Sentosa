@@ -39,7 +39,8 @@
                                 class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
                                 <option value="">Walk-in Customer</option>
                                 @foreach($customers as $customer)
-                                    <option value="{{ $customer->id }}">
+                                    <option value="{{ $customer->id }}"
+                                        {{ (string) old('customer_id') === (string) $customer->id ? 'selected' : '' }}>
                                         {{ $customer->customer_name }}
                                     </option>
                                 @endforeach
@@ -63,9 +64,11 @@
                             <select name="payment_method" id="payment_method"
                                 class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
                                 required>
-                                <option value="Cash">Cash</option>
-                                <option value="Transfer">Transfer</option>
-                                <option value="Utang">Utang</option>
+                                @foreach(['Cash', 'Transfer', 'Utang'] as $method)
+                                    <option value="{{ $method }}" {{ old('payment_method') === $method ? 'selected' : '' }}>
+                                        {{ $method }}
+                                    </option>
+                                @endforeach
                             </select>
                             <x-input-error :messages="$errors->get('payment_method')" class="mt-2" />
                         </div>
@@ -76,17 +79,20 @@
                             <select name="payment_status" id="payment_status"
                                 class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
                                 required>
-                                <option value="Lunas">Lunas</option>
-                                <option value="Belum Bayar">Belum Bayar</option>
+                                @foreach(['Lunas', 'Belum Bayar'] as $status)
+                                    <option value="{{ $status }}" {{ old('payment_status') === $status ? 'selected' : '' }}>
+                                        {{ $status }}
+                                    </option>
+                                @endforeach
                             </select>
                             <x-input-error :messages="$errors->get('payment_status')" class="mt-2" />
                         </div>
 
                         {{-- Due Date --}}
-                        <div id="due-date-section" class="hidden">
+                        <div id="due-date-section" class="{{ old('payment_status') === 'Belum Bayar' ? '' : 'hidden' }}">
                             <x-input-label for="due_date" :value="__('Jatuh Tempo')" />
                             <x-text-input id="due_date" name="due_date" type="date"
-                                class="mt-1 block w-full" />
+                                class="mt-1 block w-full" value="{{ old('due_date') }}" />
                             <x-input-error :messages="$errors->get('due_date')" class="mt-2" />
                         </div>
 
@@ -117,52 +123,114 @@
                                             <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Aksi</th>
                                         </tr>
                                     </thead>
+                                    @php
+                                        // On a validation/stock-check failure, old('product_id') carries
+                                        // every row the user had filled in — rebuild the same number of
+                                        // rows from old() instead of always starting from one blank row,
+                                        // so the whole item list survives a redirect back to this form.
+                                        $oldProductIds = old('product_id', []);
+                                        $hasOldItems   = is_array($oldProductIds) && count($oldProductIds) > 0;
+                                    @endphp
                                     <tbody id="sale-items-body" class="bg-white divide-y divide-gray-200">
-                                        <tr>
-                                            <td class="px-4 py-3 w-72">
-                                                <select name="product_id[]" class="product-select w-full border-gray-300 rounded-md shadow-sm">
-                                                    <option value="">Pilih Produk</option>
-                                                    @foreach($products as $product)
-                                                        <option value="{{ $product->id }}">
-                                                            {{ $product->product_name }}
-                                                        </option>
-                                                    @endforeach
-                                                </select>
-                                            </td>
-                                            <td class="px-4 py-3">
-                                                <span class="stock-display block w-28 text-sm text-gray-500">-</span>
-                                            </td>
-                                            <td class="px-4 py-3">
-                                                <input type="number" name="quantity[]" min="0.25" step="0.25" value="1"
-                                                    class="qty-input w-24 border-gray-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
-                                            </td>
-                                            <td class="px-4 py-3">
-                                                <select name="unit[]"
-                                                    class="unit-input w-24 border-gray-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
-                                                    <option value="Buah">Buah</option>
-                                                    <option value="Lusin">Lusin</option>
-                                                    <option value="Kodi">Kodi</option>
-                                                    <option value="Gross">Gross</option>
-                                                    <option value="Set">Set</option>
-                                                </select>
-                                            </td>
-                                            <td class="px-4 py-3">
-                                                <input type="number" step="0.01" name="price[]"
-                                                    class="price-input w-36 border-gray-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
-                                            </td>
-                                            <td class="px-4 py-3">
-                                                <input type="number" step="0.01" name="discount[]" value="0"
-                                                    class="discount-input w-20 border-gray-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
-                                            </td>
-                                            <td class="px-4 py-3 whitespace-nowrap">
-                                                <span class="subtotal-display text-sm font-semibold text-gray-800">Rp 0</span>
-                                            </td>
-                                            <td class="px-4 py-3">
-                                                <button type="button" class="remove-row text-red-600 hover:text-red-800 text-sm">
-                                                    Hapus
-                                                </button>
-                                            </td>
-                                        </tr>
+                                        @if($hasOldItems)
+                                            @foreach($oldProductIds as $i => $pid)
+                                                @php $oldProduct = $products->firstWhere('id', (int) $pid); @endphp
+                                                <tr data-product-id="{{ $pid }}">
+                                                    <td class="px-4 py-3 w-72">
+                                                        <select name="product_id[]" class="product-select w-full border-gray-300 rounded-md shadow-sm">
+                                                            <option value="">Pilih Produk</option>
+                                                            @foreach($products as $product)
+                                                                <option value="{{ $product->id }}"
+                                                                    {{ (string) $product->id === (string) $pid ? 'selected' : '' }}>
+                                                                    {{ $product->product_name }}
+                                                                </option>
+                                                            @endforeach
+                                                        </select>
+                                                    </td>
+                                                    <td class="px-4 py-3">
+                                                        <span class="stock-display block w-28 text-sm text-gray-500">{{ $oldProduct->stok_display ?? '-' }}</span>
+                                                    </td>
+                                                    <td class="px-4 py-3">
+                                                        <input type="number" name="quantity[]" min="0.25" step="0.25"
+                                                            value="{{ old("quantity.$i", 1) }}"
+                                                            class="qty-input w-24 border-gray-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                                                    </td>
+                                                    <td class="px-4 py-3">
+                                                        <select name="unit[]"
+                                                            class="unit-input w-24 border-gray-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                                                            @foreach(['Buah', 'Lusin', 'Kodi', 'Gross', 'Set'] as $unitOption)
+                                                                <option value="{{ $unitOption }}"
+                                                                    {{ old("unit.$i") === $unitOption ? 'selected' : '' }}>
+                                                                    {{ $unitOption }}
+                                                                </option>
+                                                            @endforeach
+                                                        </select>
+                                                    </td>
+                                                    <td class="px-4 py-3">
+                                                        <input type="number" step="0.01" name="price[]" value="{{ old("price.$i") }}"
+                                                            class="price-input w-36 border-gray-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                                                    </td>
+                                                    <td class="px-4 py-3">
+                                                        <input type="number" step="0.01" name="discount[]" value="{{ old("discount.$i", 0) }}"
+                                                            class="discount-input w-20 border-gray-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                                                    </td>
+                                                    <td class="px-4 py-3 whitespace-nowrap">
+                                                        <span class="subtotal-display text-sm font-semibold text-gray-800">Rp 0</span>
+                                                    </td>
+                                                    <td class="px-4 py-3">
+                                                        <button type="button" class="remove-row text-red-600 hover:text-red-800 text-sm">
+                                                            Hapus
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            @endforeach
+                                        @else
+                                            <tr>
+                                                <td class="px-4 py-3 w-72">
+                                                    <select name="product_id[]" class="product-select w-full border-gray-300 rounded-md shadow-sm">
+                                                        <option value="">Pilih Produk</option>
+                                                        @foreach($products as $product)
+                                                            <option value="{{ $product->id }}">
+                                                                {{ $product->product_name }}
+                                                            </option>
+                                                        @endforeach
+                                                    </select>
+                                                </td>
+                                                <td class="px-4 py-3">
+                                                    <span class="stock-display block w-28 text-sm text-gray-500">-</span>
+                                                </td>
+                                                <td class="px-4 py-3">
+                                                    <input type="number" name="quantity[]" min="0.25" step="0.25" value="1"
+                                                        class="qty-input w-24 border-gray-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                                                </td>
+                                                <td class="px-4 py-3">
+                                                    <select name="unit[]"
+                                                        class="unit-input w-24 border-gray-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                                                        <option value="Buah">Buah</option>
+                                                        <option value="Lusin">Lusin</option>
+                                                        <option value="Kodi">Kodi</option>
+                                                        <option value="Gross">Gross</option>
+                                                        <option value="Set">Set</option>
+                                                    </select>
+                                                </td>
+                                                <td class="px-4 py-3">
+                                                    <input type="number" step="0.01" name="price[]"
+                                                        class="price-input w-36 border-gray-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                                                </td>
+                                                <td class="px-4 py-3">
+                                                    <input type="number" step="0.01" name="discount[]" value="0"
+                                                        class="discount-input w-20 border-gray-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                                                </td>
+                                                <td class="px-4 py-3 whitespace-nowrap">
+                                                    <span class="subtotal-display text-sm font-semibold text-gray-800">Rp 0</span>
+                                                </td>
+                                                <td class="px-4 py-3">
+                                                    <button type="button" class="remove-row text-red-600 hover:text-red-800 text-sm">
+                                                        Hapus
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        @endif
                                     </tbody>
                                     <tfoot class="bg-gray-50">
                                         <tr>
@@ -250,6 +318,7 @@
             }
 
             paymentStatus.addEventListener('change', toggleDueDate);
+            toggleDueDate(); // sync with old('payment_status') on a repopulated form
 
             paymentMethod.addEventListener('change', function () {
                 if (this.value === 'Utang') {
@@ -332,6 +401,24 @@
                             delete row.dataset.productId;
                             return;
                         }
+
+                        // Cegah produk yang sama dipilih di lebih dari satu baris —
+                        // blokir pilihannya, kembalikan dropdown ke kosong, dan
+                        // arahkan user ke baris yang sudah ada supaya cukup
+                        // menambah jumlahnya di sana.
+                        const duplicateRow = Array.from(document.querySelectorAll('#sale-items-body tr'))
+                            .find(otherRow => otherRow !== row && otherRow.dataset.productId === value);
+
+                        if (duplicateRow) {
+                            alert('Produk ini sudah ada di daftar. Tambah jumlahnya saja.');
+                            this.clear(true);
+                            delete row.dataset.productId;
+
+                            duplicateRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            duplicateRow.querySelector('.qty-input')?.focus();
+                            return;
+                        }
+
                         const data = productData[value];
                         if (!data) return;
 
@@ -345,10 +432,11 @@
                 });
             }
 
-            // Init baris pertama
+            // Init baris pertama (atau baris hasil repopulasi old() setelah redirect back)
             document.querySelectorAll('#sale-items-body tr').forEach(row => {
                 initializeTomSelect(row.querySelector('.product-select'));
                 attachRowListeners(row);
+                updateSubtotal(row);
             });
 
             // ─── Add row ──────────────────────────────────────────────────────

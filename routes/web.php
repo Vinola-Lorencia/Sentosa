@@ -49,6 +49,8 @@ Route::middleware('auth')->group(function () {
         Route::get('checkout', [TokoController::class, 'checkout'])->name('checkout');
         Route::post('checkout', [TokoController::class, 'prosesCheckout'])->name('checkout.proses');
         Route::get('pesanan', [TokoController::class, 'pesanan'])->name('pesanan');
+        Route::get('tagihan', [TokoController::class, 'tagihan'])->name('tagihan');
+        Route::post('products/{product}/view', [TokoController::class, 'markProductViewed'])->name('products.view');
     });
 
     // ─── Route Pemilik & Karyawan (Produk & Penjualan, tanpa hapus) ────────────

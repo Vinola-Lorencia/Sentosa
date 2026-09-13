@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Customer;
 use App\Models\Product;
+use App\Models\ProductView;
 use App\Models\Sale;
 use App\Models\SaleDetail;
 use App\Services\UnitConverter;
@@ -20,13 +21,38 @@ class TokoController extends Controller
     public function index(Request $request)
     {
         $search = $request->search;
+        $filter = $request->get('filter');
 
         $products = Product::where('stock', '>', 0)
             ->when($search, fn($q) => $q->whereRaw('LOWER(product_name) LIKE ?', ['%' . strtolower($search) . '%']))
+            // ?filter=baru — same "new" definition as the navbar badge, so
+            // clicking the badge shows exactly the products it counted.
+            ->when($filter === 'baru', fn($q) => $q->newProducts()->unseenBy(Auth::id()))
+            // Eager-loaded per the logged-in Pembeli only, so the "Baru"
+            // ribbon (index.blade.php checks $product->views->isEmpty())
+            // doesn't cost an extra query per card.
+            ->with(['views' => fn($q) => $q->where('user_id', Auth::id())])
             ->orderBy('product_name')
-            ->paginate(12);
+            ->paginate(12)
+            ->withQueryString();
 
-        return view('toko.index', compact('products', 'search'));
+        return view('toko.index', compact('products', 'search', 'filter'));
+    }
+
+    /**
+     * Mark a single product as "seen" by the current user — this is what
+     * clears both its own "Baru" ribbon and the navbar's new-product badge
+     * count for that product specifically. Never triggered just by loading
+     * the catalog list; only by opening a product's own detail.
+     */
+    public function markProductViewed(Product $product)
+    {
+        ProductView::firstOrCreate(
+            ['user_id' => Auth::id(), 'product_id' => $product->id],
+            ['viewed_at' => now()]
+        );
+
+        return response()->json(['success' => true]);
     }
 
     // ─── Keranjang ───────────────────────────────────────────────────────────
@@ -69,7 +95,7 @@ class TokoController extends Controller
         $totalBaseQty = $existingBaseQty + $baseQtyToAdd;
 
         if ($totalBaseQty > $product->stock) {
-            return back()->with('error', "Stok {$product->product_name} tidak mencukupi. Stok tersedia: {$product->stok_display}");
+            return back()->with('error', "Stok {$product->product_name} tidak mencukupi. Stok tersedia: {$product->stok_display}. Silakan sesuaikan jumlah pesanan.");
         }
 
         $qtyInSaleUnit = UnitConverter::fromBaseUnit($totalBaseQty, $product->sale_unit, $product);
@@ -109,7 +135,7 @@ class TokoController extends Controller
                 $baseQty = UnitConverter::toBaseUnit((float) $request->quantity, $keranjang[$key]['unit'], $product);
 
                 if ($baseQty > $product->stock) {
-                    return back()->with('error', "Stok tidak mencukupi. Tersedia: {$product->stok_display}");
+                    return back()->with('error', "Stok {$product->product_name} tidak mencukupi. Stok tersedia: {$product->stok_display}. Silakan sesuaikan jumlah pesanan.");
                 }
 
                 $keranjang[$key]['quantity'] = $request->quantity;
@@ -163,47 +189,74 @@ class TokoController extends Controller
                 ->with('error', 'Keranjang kosong.');
         }
 
-        DB::transaction(function () use ($request, $keranjang) {
+        try {
+            DB::transaction(function () use ($request, $keranjang) {
 
-            $total = collect($keranjang)->sum('subtotal');
+                // Cek stok SEMUA item dulu, sebelum menyimpan apa pun. Kalau
+                // satu produk kurang, exception ini membatalkan (rollback)
+                // seluruh transaksi — sale/sale_detail yang sempat tersimpan
+                // untuk item lain di baris berikutnya ikut dibatalkan — dan
+                // ditangkap oleh catch di bawah tanpa pernah menyentuh
+                // Session::forget('keranjang'), jadi keranjang tetap utuh.
+                foreach ($keranjang as $item) {
+                    $product = Product::findOrFail($item['product_id']);
+                    $baseQty = UnitConverter::toBaseUnit((float) $item['quantity'], $item['unit'], $product);
 
-            // ✅ Cari customer by nama user yang login
-            $customer = Customer::where('customer_name', Auth::user()->name)->first();
+                    if ($baseQty > $product->stock) {
+                        throw new \Exception(
+                            "Stok {$product->product_name} tidak mencukupi. Stok tersedia: {$product->stok_display}. Silakan sesuaikan jumlah pesanan."
+                        );
+                    }
+                }
 
-            // Simpan sale
-            $sale = new Sale();
-            $sale->customer_id    = $customer?->id ?? null;
-            $sale->user_id        = Auth::id();
-            $sale->sale_date      = now()->toDateString();
-            $sale->payment_method = $request->payment_method;
-            $sale->payment_status = 'Belum Bayar';
-            $sale->total_amount   = $total;
-            $sale->is_new         = true;
-            $sale->notes          = "Pembeli: {$request->nama}" .
-                                    ($request->alamat ? " | Alamat: {$request->alamat}" : '') .
-                                    ($request->catatan ? " | Catatan: {$request->catatan}" : '');
-            $sale->save();
+                $total = collect($keranjang)->sum('subtotal');
 
-            // Simpan detail + kurangi stok
-            foreach ($keranjang as $item) {
-                $detail = new SaleDetail();
-                $detail->sale_id    = $sale->sale_id;
-                $detail->product_id = $item['product_id'];
-                $detail->quantity   = $item['quantity'];
-                $detail->unit       = $item['unit'];
-                $detail->price      = $item['price'];
-                $detail->discount   = 0;
-                $detail->subtotal   = $item['subtotal'];
-                $detail->save();
+                // ✅ Cari customer by nama user yang login
+                $customer = Customer::where('customer_name', Auth::user()->name)->first();
 
-                $product = Product::findOrFail($item['product_id']);
-                $product->stock -= UnitConverter::toBaseUnit((float) $item['quantity'], $item['unit'], $product);
-                $product->save();
-            }
+                // Simpan sale
+                $sale = new Sale();
+                $sale->customer_id    = $customer?->id ?? null;
+                $sale->user_id        = Auth::id();
+                $sale->sale_date      = now()->toDateString();
+                $sale->payment_method = $request->payment_method;
+                $sale->payment_status = 'Belum Bayar';
+                $sale->total_amount   = $total;
+                $sale->is_new         = true;
+                $sale->notes          = "Pembeli: {$request->nama}" .
+                                        ($request->alamat ? " | Alamat: {$request->alamat}" : '') .
+                                        ($request->catatan ? " | Catatan: {$request->catatan}" : '');
+                $sale->save();
 
-            Session::forget('keranjang');
-            Session::put('last_order_id', $sale->sale_id);
-        });
+                // Simpan detail + kurangi stok
+                foreach ($keranjang as $item) {
+                    $detail = new SaleDetail();
+                    $detail->sale_id    = $sale->sale_id;
+                    $detail->product_id = $item['product_id'];
+                    $detail->quantity   = $item['quantity'];
+                    $detail->unit       = $item['unit'];
+                    $detail->price      = $item['price'];
+                    $detail->discount   = 0;
+                    $detail->subtotal   = $item['subtotal'];
+                    $detail->save();
+
+                    $product = Product::findOrFail($item['product_id']);
+                    $product->stock -= UnitConverter::toBaseUnit((float) $item['quantity'], $item['unit'], $product);
+                    $product->save();
+                }
+
+                Session::put('last_order_id', $sale->sale_id);
+            });
+        } catch (\Exception $e) {
+            // Cart is left untouched — we never call Session::forget('keranjang')
+            // on this path, so the customer can adjust/remove the offending
+            // item and retry without losing the rest of their cart.
+            return redirect()->route('toko.keranjang')
+                ->with('error', $e->getMessage());
+        }
+
+        // Only clear the cart once the whole transaction has committed.
+        Session::forget('keranjang');
 
         return redirect()->route('toko.pesanan')
             ->with('success', 'Pesanan berhasil dikirim! Pemilik akan segera memproses pesananmu.');
@@ -226,5 +279,24 @@ class TokoController extends Controller
             ->paginate(10);
 
         return view('toko.pesanan', compact('pesanan', 'lastOrderId'));
+    }
+
+    // ─── Tagihan Saya ────────────────────────────────────────────────────────
+
+    public function tagihan()
+    {
+        // Invoices/receivables are recorded against customer_id (set whether
+        // the sale came from the storefront or was entered by staff for a
+        // walk-in), not user_id (which only tracks who processed a storefront
+        // checkout) — so this must go through the customers.user_id link
+        // rather than reusing pesanan()'s user_id filter.
+        $customer = Auth::user()->customer;
+
+        $sales = Sale::with('receivable.payments')
+            ->where('customer_id', $customer?->id ?? 0)
+            ->latest('sale_date')
+            ->paginate(10);
+
+        return view('toko.tagihan', compact('sales', 'customer'));
     }
 }

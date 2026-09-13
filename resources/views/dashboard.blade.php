@@ -335,10 +335,22 @@
                                     <p class="text-xs text-gray-500 truncate">
                                         Terakhir: {{ $item['produk_terakhir']->product_name ?? '-' }}
                                     </p>
+                                    @if($item['foto_bulan_ini'] > 0)
+                                        <p class="text-xs text-gray-500 truncate">
+                                            Foto terakhir: {{ $item['foto_terakhir']->product_name ?? '-' }}
+                                        </p>
+                                    @endif
                                 </div>
-                                <span class="text-xs font-bold text-indigo-600 whitespace-nowrap">
-                                    {{ $item['jumlah_bulan_ini'] }} produk
-                                </span>
+                                <div class="text-right shrink-0">
+                                    <span class="block text-xs font-bold text-indigo-600 whitespace-nowrap">
+                                        {{ $item['jumlah_bulan_ini'] }} produk
+                                    </span>
+                                    @if($item['foto_bulan_ini'] > 0)
+                                        <span class="block text-[10px] font-semibold text-amber-600 whitespace-nowrap">
+                                            📷 {{ $item['foto_bulan_ini'] }} foto
+                                        </span>
+                                    @endif
+                                </div>
                             </div>
                         @empty
                             <p class="text-xs text-gray-400 italic">Belum ada user dengan role Karyawan.</p>
@@ -356,7 +368,7 @@
         <div class="bg-white rounded-lg shadow-lg w-full max-w-2xl max-h-[80vh] flex flex-col">
             <div class="flex items-center justify-between p-4 sm:p-6 border-b border-gray-200">
                 <h3 class="text-sm font-semibold text-gray-800" id="karyawan-products-modal-title">
-                    Produk yang ditambahkan oleh
+                    Aktivitas Produk oleh
                 </h3>
                 <button type="button" onclick="closeKaryawanProductsModal()"
                     class="text-gray-400 hover:text-gray-600">
@@ -375,6 +387,7 @@
                         <thead>
                             <tr class="border-b border-gray-200">
                                 <th class="pb-2 text-left text-xs font-medium text-gray-500">Nama Produk</th>
+                                <th class="pb-2 text-left text-xs font-medium text-gray-500">Aktivitas</th>
                                 <th class="pb-2 text-left text-xs font-medium text-gray-500">Stok</th>
                                 <th class="pb-2 text-right text-xs font-medium text-gray-500">Tanggal</th>
                                 <th class="pb-2 text-right text-xs font-medium text-gray-500">Aksi</th>
@@ -402,7 +415,7 @@
             const table   = document.getElementById('karyawan-products-modal-table');
             const body    = document.getElementById('karyawan-products-modal-body');
 
-            title.textContent = `Produk yang ditambahkan oleh ${userName}`;
+            title.textContent = `Aktivitas Produk oleh ${userName}`;
             body.innerHTML = '';
             table.classList.add('hidden');
             loading.classList.remove('hidden');
@@ -416,7 +429,7 @@
                     loading.classList.add('hidden');
 
                     if (!data.products.length) {
-                        loading.textContent = 'Belum ada produk yang ditambahkan.';
+                        loading.textContent = 'Belum ada aktivitas produk.';
                         loading.classList.remove('hidden');
                         return;
                     }
@@ -424,6 +437,11 @@
                     body.innerHTML = data.products.map((product) => `
                         <tr class="border-b border-gray-100 last:border-0">
                             <td class="py-2 text-xs text-gray-900">${escapeHtml(product.product_name)}</td>
+                            <td class="py-2 text-xs whitespace-nowrap">
+                                <span class="px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${product.activity === 'Mengubah Foto' ? 'bg-amber-100 text-amber-700' : 'bg-indigo-100 text-indigo-700'}">
+                                    ${product.activity === 'Mengubah Foto' ? '📷 Mengubah Foto' : '➕ Menambah Produk'}
+                                </span>
+                            </td>
                             <td class="py-2 text-xs ${product.stock > 0 ? 'text-gray-700' : 'text-red-600'}">
                                 ${product.stock > 0 ? escapeHtml(product.stok_display) : 'Habis'}
                             </td>

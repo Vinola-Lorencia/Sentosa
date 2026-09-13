@@ -366,6 +366,24 @@
                             delete row.dataset.productId;
                             return;
                         }
+
+                        // Cegah produk yang sama dipilih di lebih dari satu baris —
+                        // blokir pilihannya, kembalikan dropdown ke kosong, dan
+                        // arahkan user ke baris yang sudah ada supaya cukup
+                        // menambah jumlahnya di sana.
+                        const duplicateRow = Array.from(document.querySelectorAll('#sale-items-body tr'))
+                            .find(otherRow => otherRow !== row && otherRow.dataset.productId === value);
+
+                        if (duplicateRow) {
+                            alert('Produk ini sudah ada di daftar. Tambah jumlahnya saja.');
+                            this.clear(true);
+                            delete row.dataset.productId;
+
+                            duplicateRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            duplicateRow.querySelector('.qty-input')?.focus();
+                            return;
+                        }
+
                         const data = productData[value];
                         if (!data) return;
 

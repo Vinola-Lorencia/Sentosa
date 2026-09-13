@@ -7,6 +7,13 @@ use Illuminate\Database\Eloquent\Model;
 
 class Product extends Model
 {
+    /**
+     * A product counts as "new" (storefront badge + "Baru" ribbon) for this
+     * many days after creation — a single constant so the window is easy to
+     * tune without hunting through query call sites.
+     */
+    public const NEW_PRODUCT_DAYS = 7;
+
     protected $fillable = [
         'product_name',
         'brand',
@@ -20,6 +27,7 @@ class Product extends Model
         'dus_to_unit',
         'stock',
         'created_by',
+        'updated_by',
     ];
 
     public function purchaseOrderDetails()
@@ -27,9 +35,55 @@ class Product extends Model
         return $this->hasMany(PurchaseOrderDetail::class, 'product_id', 'id');
     }
 
+    public function saleDetails()
+    {
+        return $this->hasMany(SaleDetail::class, 'product_id', 'id');
+    }
+
+    public function purchaseDetails()
+    {
+        return $this->hasMany(PurchaseDetail::class, 'product_id', 'id');
+    }
+
     public function creator()
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    /**
+     * Who last touched this product via ProductController::updatePhoto() —
+     * only that endpoint fills updated_by, so this specifically means "who
+     * last changed the photo", not "who last edited the product" in general
+     * (the full edit form does not set it).
+     */
+    public function updater()
+    {
+        return $this->belongsTo(User::class, 'updated_by');
+    }
+
+    public function views()
+    {
+        return $this->hasMany(ProductView::class, 'product_id', 'id');
+    }
+
+    /**
+     * Products created within the last NEW_PRODUCT_DAYS days.
+     */
+    public function scopeNewProducts($query)
+    {
+        return $query->where('created_at', '>=', now()->subDays(self::NEW_PRODUCT_DAYS));
+    }
+
+    /**
+     * Products this specific user has not yet marked viewed (via
+     * ProductView) — "unseen" is tracked per user per product, not per
+     * visit, so browsing the catalog list never clears it on its own.
+     */
+    public function scopeUnseenBy($query, int $userId)
+    {
+        return $query->whereDoesntHave('views', function ($q) use ($userId) {
+            $q->where('user_id', $userId);
+        });
     }
 
     /**

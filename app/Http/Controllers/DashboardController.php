@@ -72,6 +72,10 @@ class DashboardController extends Controller
             ->get();
 
         // ✅ Input produk oleh Karyawan — jumlah bulan ini + produk terakhir
+        // "jumlah_bulan_ini"/"produk_terakhir" tetap murni soal produk BARU
+        // (created_by) — tidak diubah, supaya tampilan lama tidak berubah
+        // arti. Aktivitas ganti foto (termasuk ke produk lama yang bukan
+        // mereka buat) dihitung terpisah di foto_bulan_ini/foto_terakhir.
         $inputProdukKaryawan = User::whereHas('role', function ($q) {
                 $q->where('role_name', 'Karyawan');
             })
@@ -85,6 +89,13 @@ class DashboardController extends Controller
                         ->count(),
                     'produk_terakhir' => Product::where('created_by', $karyawan->id)
                         ->latest('created_at')
+                        ->first(),
+                    'foto_bulan_ini'  => Product::where('updated_by', $karyawan->id)
+                        ->whereMonth('updated_at', $now->month)
+                        ->whereYear('updated_at', $now->year)
+                        ->count(),
+                    'foto_terakhir'   => Product::where('updated_by', $karyawan->id)
+                        ->latest('updated_at')
                         ->first(),
                 ];
             });

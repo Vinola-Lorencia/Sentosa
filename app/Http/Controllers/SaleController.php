@@ -64,7 +64,7 @@ class SaleController extends Controller
                     $product = Product::findOrFail($productId);
                     $baseQty = UnitConverter::toBaseUnit((float) $quantities[$i], $units[$i] ?? '', $product);
                     if ($product->stock < $baseQty) {
-                        throw new \Exception("Stok {$product->product_name} tidak mencukupi. Stok tersedia: {$product->stock} {$product->sale_unit}");
+                        throw new \Exception("Stok {$product->product_name} tidak mencukupi. Stok tersedia: {$product->stok_display}.");
                     }
                 }
 
@@ -201,7 +201,7 @@ class SaleController extends Controller
                     $product = Product::findOrFail($productId);
                     $baseQty = UnitConverter::toBaseUnit((float) $quantities[$i], $units[$i] ?? '', $product);
                     if ($product->stock < $baseQty) {
-                        throw new \Exception("Stok {$product->product_name} tidak mencukupi. Stok tersedia: {$product->stock} {$product->sale_unit}");
+                        throw new \Exception("Stok {$product->product_name} tidak mencukupi. Stok tersedia: {$product->stok_display}.");
                     }
                 }
 
@@ -306,7 +306,7 @@ class SaleController extends Controller
                     $baseQty = UnitConverter::toBaseUnit((float) $detail->quantity, $detail->unit ?? '', $product);
 
                     if ($product->stock < $baseQty) {
-                        throw new \Exception("Stok {$product->product_name} tidak mencukupi untuk memproses pesanan ini. Stok tersedia: {$product->stock} {$product->sale_unit}");
+                        throw new \Exception("Stok {$product->product_name} tidak mencukupi untuk memproses pesanan ini. Stok tersedia: {$product->stok_display}.");
                     }
 
                     $product->stock -= $baseQty;

@@ -22,6 +22,13 @@
                     </div>
                 @endif
 
+                {{-- Pesan Error --}}
+                @if(session('error'))
+                    <div class="mb-4 rounded-lg bg-red-100 border border-red-200 p-4 text-red-800">
+                        {{ session('error') }}
+                    </div>
+                @endif
+
                 {{-- Form Filter --}}
                 <form method="GET" action="{{ route('products.index') }}"
                       class="mb-6 grid grid-cols-1 md:grid-cols-4 gap-4">

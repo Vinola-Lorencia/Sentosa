@@ -165,6 +165,64 @@ class TokoTest extends TestCase
         ]);
     }
 
+    public function test_checkout_with_insufficient_stock_keeps_cart_intact()
+    {
+        $productA = Product::create([
+            'product_name'         => 'Produk Aman',
+            'sale_price'           => 15000,
+            'sale_unit'            => 'Buah',
+            'purchase_unit'        => 'Dus',
+            'dus_to_unit'          => 1,
+            'stock'                => 50,
+            'default_buy_price'    => 10000,
+            'default_buy_discount' => 0,
+        ]);
+
+        $productB = Product::create([
+            'product_name'         => 'Produk Stok Kurang',
+            'sale_price'           => 20000,
+            'sale_unit'            => 'Buah',
+            'purchase_unit'        => 'Dus',
+            'dus_to_unit'          => 1,
+            'stock'                => 10,
+            'default_buy_price'    => 12000,
+            'default_buy_discount' => 0,
+        ]);
+
+        $this->actingAs($this->pembeli)->post(route('toko.keranjang.tambah'), [
+            'product_id' => $productA->id, 'quantity' => 5, 'unit' => 'Buah',
+        ]);
+        $this->actingAs($this->pembeli)->post(route('toko.keranjang.tambah'), [
+            'product_id' => $productB->id, 'quantity' => 10, 'unit' => 'Buah',
+        ]);
+
+        // Simulate another buyer taking most of productB's stock between the
+        // cart add and checkout — tambahKeranjang's own check can't catch this.
+        $productB->update(['stock' => 2]);
+
+        $response = $this->actingAs($this->pembeli)
+            ->post(route('toko.checkout.proses'), [
+                'nama' => 'Pembeli Test', 'payment_method' => 'Cash',
+            ]);
+
+        $response->assertRedirect(route('toko.keranjang'));
+        $response->assertSessionHas('error');
+        $this->assertStringContainsString('Produk Stok Kurang', session('error'));
+        $this->assertStringContainsString('Silakan sesuaikan jumlah pesanan.', session('error'));
+
+        // No sale was created at all — the whole transaction, including the
+        // valid productA line, was rolled back because of productB's failure.
+        $this->assertDatabaseCount('sales', 0);
+        $this->assertDatabaseCount('sale_details', 0);
+        $this->assertEquals(50, $productA->fresh()->stock);
+        $this->assertEquals(2, $productB->fresh()->stock);
+
+        // Both cart items are still there — nothing was lost.
+        $keranjang = session('keranjang');
+        $this->assertArrayHasKey('product_' . $productA->id, $keranjang);
+        $this->assertArrayHasKey('product_' . $productB->id, $keranjang);
+    }
+
     public function test_pesanan_saya_shows_only_own_orders()
     {
         $otherPembeli = User::create([

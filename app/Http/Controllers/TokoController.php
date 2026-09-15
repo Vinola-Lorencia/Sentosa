@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\CartItem;
 use App\Models\Customer;
 use App\Models\Product;
 use App\Models\ProductView;
@@ -23,7 +24,7 @@ class TokoController extends Controller
         $search = $request->search;
         $filter = $request->get('filter');
 
-        $products = Product::where('stock', '>', 0)
+        $products = Product::available()
             ->when($search, fn($q) => $q->whereRaw('LOWER(product_name) LIKE ?', ['%' . strtolower($search) . '%']))
             // ?filter=baru — same "new" definition as the navbar badge, so
             // clicking the badge shows exactly the products it counted.
@@ -59,12 +60,8 @@ class TokoController extends Controller
 
     public function keranjang()
     {
-        $keranjang = Session::get('keranjang', []);
-        $total     = 0;
-
-        foreach ($keranjang as $item) {
-            $total += $item['subtotal'];
-        }
+        $keranjang = CartItem::with('product')->where('user_id', Auth::id())->get();
+        $total     = $keranjang->sum('subtotal');
 
         return view('toko.keranjang', compact('keranjang', 'total'));
     }
@@ -77,39 +74,43 @@ class TokoController extends Controller
             'unit'       => 'required|in:Buah,Lusin,Kodi,Gross',
         ]);
 
-        $product   = Product::findOrFail($request->product_id);
-        $keranjang = Session::get('keranjang', []);
-        $key       = 'product_' . $product->id;
+        $product = Product::findOrFail($request->product_id);
+        $unit    = $request->unit;
+        $userId  = Auth::id();
 
-        // sale_price is quoted per sale_unit, so the cart always keeps
-        // quantity/unit in sale_unit terms (same convention as
-        // WhatsAppController::convertUnit()) regardless of which unit the
-        // customer picked in the dropdown — route through true base units
-        // so quantities from different chosen units merge correctly.
-        $baseQtyToAdd = UnitConverter::toBaseUnit((float) $request->quantity, $request->unit, $product);
+        // One row per user+product+unit (see the cart_items migration's
+        // unique constraint) — the same product added in two different
+        // units (e.g. 5 Buah on one visit, 1 Lusin on another) stays as two
+        // separate rows, since price varies per chosen unit and there is no
+        // single unit two such rows could be merged into.
+        $existing = CartItem::where('user_id', $userId)
+            ->where('product_id', $product->id)
+            ->where('unit', $unit)
+            ->first();
 
-        $existingBaseQty = isset($keranjang[$key])
-            ? UnitConverter::toBaseUnit((float) $keranjang[$key]['quantity'], $keranjang[$key]['unit'], $product)
-            : 0.0;
+        $newQuantity = (float) $request->quantity + (float) ($existing->quantity ?? 0);
 
-        $totalBaseQty = $existingBaseQty + $baseQtyToAdd;
+        // Stock is one shared pool per product regardless of which unit(s)
+        // it's expressed in across cart rows, so the check sums every other
+        // row for this product — converted to true base units via
+        // UnitConverter::toBaseUnit(), which is independent of sale_unit
+        // (1 Lusin is always 12 pieces) — plus the new total for this unit.
+        $totalBaseQtyForProduct = CartItem::where('user_id', $userId)
+            ->where('product_id', $product->id)
+            ->where('unit', '!=', $unit)
+            ->get()
+            ->sum(fn ($item) => UnitConverter::toBaseUnit((float) $item->quantity, $item->unit, $product));
 
-        if ($totalBaseQty > $product->stock) {
+        $totalBaseQtyForProduct += UnitConverter::toBaseUnit($newQuantity, $unit, $product);
+
+        if ($totalBaseQtyForProduct > $product->stock) {
             return back()->with('error', "Stok {$product->product_name} tidak mencukupi. Stok tersedia: {$product->stok_display}. Silakan sesuaikan jumlah pesanan.");
         }
 
-        $qtyInSaleUnit = UnitConverter::fromBaseUnit($totalBaseQty, $product->sale_unit, $product);
-
-        $keranjang[$key] = [
-            'product_id'   => $product->id,
-            'product_name' => $product->product_name,
-            'unit'         => $product->sale_unit,
-            'price'        => (float) $product->sale_price,
-            'quantity'     => $qtyInSaleUnit,
-            'subtotal'     => $qtyInSaleUnit * (float) $product->sale_price,
-        ];
-
-        Session::put('keranjang', $keranjang);
+        CartItem::updateOrCreate(
+            ['user_id' => $userId, 'product_id' => $product->id, 'unit' => $unit],
+            ['quantity' => $newQuantity]
+        );
 
         return back()->with('success', "{$product->product_name} ditambahkan ke keranjang.");
     }
@@ -120,39 +121,41 @@ class TokoController extends Controller
             'quantity' => 'required|numeric|min:0',
         ]);
 
-        $keranjang = Session::get('keranjang', []);
-        $key       = 'product_' . $id;
+        // Always scoped to the logged-in user — cart_items.id is a global
+        // auto-increment shared across every customer, so without this a
+        // user could edit/delete another customer's cart row just by
+        // guessing an id.
+        $item = CartItem::where('user_id', Auth::id())->where('id', $id)->first();
 
-        if (isset($keranjang[$key])) {
+        if ($item) {
             if ($request->quantity <= 0) {
-                unset($keranjang[$key]);
+                $item->delete();
             } else {
-                $product = Product::findOrFail($id);
+                $product = $item->product;
 
-                // Cart quantity is stored in sale_unit terms — convert to
-                // true base units before comparing against stock (also
-                // stored in base/Buah units).
-                $baseQty = UnitConverter::toBaseUnit((float) $request->quantity, $keranjang[$key]['unit'], $product);
+                $totalBaseQtyForProduct = CartItem::where('user_id', Auth::id())
+                    ->where('product_id', $product->id)
+                    ->where('id', '!=', $item->id)
+                    ->get()
+                    ->sum(fn ($i) => UnitConverter::toBaseUnit((float) $i->quantity, $i->unit, $product));
 
-                if ($baseQty > $product->stock) {
+                $totalBaseQtyForProduct += UnitConverter::toBaseUnit((float) $request->quantity, $item->unit, $product);
+
+                if ($totalBaseQtyForProduct > $product->stock) {
                     return back()->with('error', "Stok {$product->product_name} tidak mencukupi. Stok tersedia: {$product->stok_display}. Silakan sesuaikan jumlah pesanan.");
                 }
 
-                $keranjang[$key]['quantity'] = $request->quantity;
-                $keranjang[$key]['subtotal'] = $request->quantity * $keranjang[$key]['price'];
+                $item->quantity = (float) $request->quantity;
+                $item->save();
             }
         }
-
-        Session::put('keranjang', $keranjang);
 
         return back()->with('success', 'Keranjang diperbarui.');
     }
 
     public function hapusKeranjang(string $id)
     {
-        $keranjang = Session::get('keranjang', []);
-        unset($keranjang['product_' . $id]);
-        Session::put('keranjang', $keranjang);
+        CartItem::where('user_id', Auth::id())->where('id', $id)->delete();
 
         return back()->with('success', 'Item dihapus dari keranjang.');
     }
@@ -161,14 +164,14 @@ class TokoController extends Controller
 
     public function checkout()
     {
-        $keranjang = Session::get('keranjang', []);
+        $keranjang = CartItem::with('product')->where('user_id', Auth::id())->get();
 
-        if (empty($keranjang)) {
+        if ($keranjang->isEmpty()) {
             return redirect()->route('toko.keranjang')
                 ->with('error', 'Keranjang kosong.');
         }
 
-        $total = collect($keranjang)->sum('subtotal');
+        $total = $keranjang->sum('subtotal');
 
         return view('toko.checkout', compact('keranjang', 'total'));
     }
@@ -182,25 +185,27 @@ class TokoController extends Controller
             'payment_method' => 'required|in:Cash,Transfer,Utang',
         ]);
 
-        $keranjang = Session::get('keranjang', []);
+        $userId    = Auth::id();
+        $keranjang = CartItem::with('product')->where('user_id', $userId)->get();
 
-        if (empty($keranjang)) {
+        if ($keranjang->isEmpty()) {
             return redirect()->route('toko.index')
                 ->with('error', 'Keranjang kosong.');
         }
 
         try {
-            DB::transaction(function () use ($request, $keranjang) {
+            DB::transaction(function () use ($request, $keranjang, $userId) {
 
                 // Cek stok SEMUA item dulu, sebelum menyimpan apa pun. Kalau
                 // satu produk kurang, exception ini membatalkan (rollback)
                 // seluruh transaksi — sale/sale_detail yang sempat tersimpan
-                // untuk item lain di baris berikutnya ikut dibatalkan — dan
-                // ditangkap oleh catch di bawah tanpa pernah menyentuh
-                // Session::forget('keranjang'), jadi keranjang tetap utuh.
+                // untuk item lain di baris berikutnya ikut dibatalkan, dan
+                // ditangkap oleh catch di bawah. cart_items tidak pernah
+                // disentuh sebelum baris ini berhasil sampai akhir, jadi
+                // keranjang otomatis tetap utuh di database kalau gagal.
                 foreach ($keranjang as $item) {
-                    $product = Product::findOrFail($item['product_id']);
-                    $baseQty = UnitConverter::toBaseUnit((float) $item['quantity'], $item['unit'], $product);
+                    $product = $item->product;
+                    $baseQty = UnitConverter::toBaseUnit((float) $item->quantity, $item->unit, $product);
 
                     if ($baseQty > $product->stock) {
                         throw new \Exception(
@@ -209,7 +214,7 @@ class TokoController extends Controller
                     }
                 }
 
-                $total = collect($keranjang)->sum('subtotal');
+                $total = $keranjang->sum('subtotal');
 
                 // ✅ Cari customer by nama user yang login
                 $customer = Customer::where('customer_name', Auth::user()->name)->first();
@@ -217,7 +222,7 @@ class TokoController extends Controller
                 // Simpan sale
                 $sale = new Sale();
                 $sale->customer_id    = $customer?->id ?? null;
-                $sale->user_id        = Auth::id();
+                $sale->user_id        = $userId;
                 $sale->sale_date      = now()->toDateString();
                 $sale->payment_method = $request->payment_method;
                 $sale->payment_status = 'Belum Bayar';
@@ -230,33 +235,33 @@ class TokoController extends Controller
 
                 // Simpan detail + kurangi stok
                 foreach ($keranjang as $item) {
+                    $product = $item->product;
+
                     $detail = new SaleDetail();
                     $detail->sale_id    = $sale->sale_id;
-                    $detail->product_id = $item['product_id'];
-                    $detail->quantity   = $item['quantity'];
-                    $detail->unit       = $item['unit'];
-                    $detail->price      = $item['price'];
+                    $detail->product_id = $item->product_id;
+                    $detail->quantity   = $item->quantity;
+                    $detail->unit       = $item->unit;
+                    $detail->price      = $item->price;
                     $detail->discount   = 0;
-                    $detail->subtotal   = $item['subtotal'];
+                    $detail->subtotal   = $item->subtotal;
                     $detail->save();
 
-                    $product = Product::findOrFail($item['product_id']);
-                    $product->stock -= UnitConverter::toBaseUnit((float) $item['quantity'], $item['unit'], $product);
+                    $product->stock -= UnitConverter::toBaseUnit((float) $item->quantity, $item->unit, $product);
                     $product->save();
                 }
+
+                // Cart only cleared once every row above has committed.
+                CartItem::where('user_id', $userId)->delete();
 
                 Session::put('last_order_id', $sale->sale_id);
             });
         } catch (\Exception $e) {
-            // Cart is left untouched — we never call Session::forget('keranjang')
-            // on this path, so the customer can adjust/remove the offending
-            // item and retry without losing the rest of their cart.
+            // Cart rows are untouched — the delete() above never ran, since
+            // the exception aborted the transaction before reaching it.
             return redirect()->route('toko.keranjang')
                 ->with('error', $e->getMessage());
         }
-
-        // Only clear the cart once the whole transaction has committed.
-        Session::forget('keranjang');
 
         return redirect()->route('toko.pesanan')
             ->with('success', 'Pesanan berhasil dikirim! Pemilik akan segera memproses pesananmu.');

@@ -16,6 +16,20 @@
 
                 </button>
 
+                <a href="{{ route('sales.print-dotmatrix', $sale->sale_id) }}" target="_blank"
+                    class="inline-flex items-center px-4 py-2 bg-slate-700 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-slate-600">
+
+                    Print Dot Matrix
+
+                </a>
+
+                <a href="{{ route('sales.print-text', $sale->sale_id) }}" target="_blank"
+                    class="inline-flex items-center px-4 py-2 bg-slate-500 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-slate-400">
+
+                    Print Teks (LX)
+
+                </a>
+
                 <a href="{{ route('sales.index') }}"
                    class="inline-flex items-center px-4 py-2 bg-gray-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-gray-500">
 

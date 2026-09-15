@@ -21,7 +21,7 @@
                 <div class="flex items-center gap-4">
                     <a href="{{ route('toko.index', ['filter' => 'baru']) }}" class="relative text-sm font-medium text-gray-600 hover:text-indigo-600">
                         🆕 Produk Baru
-                        @php $produkBaruCount = \App\Models\Product::newProducts()->unseenBy(auth()->id())->count(); @endphp
+                        @php $produkBaruCount = \App\Models\Product::available()->newProducts()->unseenBy(auth()->id())->count(); @endphp
                         @if($produkBaruCount > 0)
                             <span class="bg-red-500 text-white text-xs font-bold rounded-full px-1.5 py-0.5">
                                 {{ $produkBaruCount }}
@@ -53,7 +53,7 @@
             </div>
         @endif
 
-        @if(empty($keranjang))
+        @if($keranjang->isEmpty())
             <div class="bg-white rounded-lg shadow-sm p-12 text-center">
                 <p class="text-4xl mb-4">🛒</p>
                 <p class="text-gray-500 mb-4">Keranjang kamu kosong.</p>
@@ -75,22 +75,22 @@
                         </tr>
                     </thead>
                     <tbody class="bg-white divide-y divide-gray-200">
-                        @foreach($keranjang as $key => $item)
+                        @foreach($keranjang as $item)
                             <tr>
                                 <td class="px-6 py-4 text-sm font-medium text-gray-900">
-                                    {{ $item['product_name'] }}
-                                    <p class="text-xs text-gray-500">{{ $item['unit'] }}</p>
+                                    {{ $item->product->product_name }}
+                                    <p class="text-xs text-gray-500">{{ $item->unit }}</p>
                                 </td>
                                 <td class="px-6 py-4 text-center">
-                                    <form action="{{ route('toko.keranjang.update', $item['product_id']) }}"
+                                    <form action="{{ route('toko.keranjang.update', $item->id) }}"
                                           method="POST" class="inline-flex items-center gap-2">
                                         @csrf
                                         @method('PATCH')
                                         <input type="number" name="quantity"
-                                            value="{{ $item['quantity'] }}"
+                                            value="{{ $item->quantity }}"
                                             min="0.25" step="0.25"
                                             class="w-20 text-sm border-gray-300 rounded-md shadow-sm text-center">
-                                        <span class="text-xs text-gray-500">{{ $item['unit'] }}</span>
+                                        <span class="text-xs text-gray-500">{{ $item->unit }}</span>
                                         <button type="submit"
                                             class="text-xs text-indigo-600 hover:text-indigo-800">
                                             Update
@@ -98,13 +98,13 @@
                                     </form>
                                 </td>
                                 <td class="px-6 py-4 text-sm text-gray-900 text-right whitespace-nowrap">
-                                    Rp {{ number_format($item['price'], 0, ',', '.') }}
+                                    Rp {{ number_format($item->price, 0, ',', '.') }}
                                 </td>
                                 <td class="px-6 py-4 text-sm font-semibold text-gray-900 text-right whitespace-nowrap">
-                                    Rp {{ number_format($item['subtotal'], 0, ',', '.') }}
+                                    Rp {{ number_format($item->subtotal, 0, ',', '.') }}
                                 </td>
                                 <td class="px-6 py-4 text-center">
-                                    <form action="{{ route('toko.keranjang.hapus', $item['product_id']) }}"
+                                    <form action="{{ route('toko.keranjang.hapus', $item->id) }}"
                                           method="POST"
                                           onsubmit="return confirm('Hapus item ini?')">
                                         @csrf

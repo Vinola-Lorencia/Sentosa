@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\CartItem;
 use App\Models\Product;
 use App\Models\Role;
 use App\Models\User;
@@ -57,14 +58,20 @@ class TokoTest extends TestCase
             ]);
 
         $response->assertRedirect();
-        $response->assertSessionHas('keranjang');
+        $this->assertDatabaseHas('cart_items', [
+            'user_id'    => $this->pembeli->id,
+            'product_id' => $product->id,
+            'unit'       => 'Lusin',
+        ]);
     }
 
     public function test_pembeli_can_tambah_keranjang_with_different_unit()
     {
-        // Product is sold per Lusin (12 buah); customer orders 1 Kodi (20
-        // buah) via the unit dropdown — the cart must store the quantity
-        // converted into sale_unit (Lusin) terms: 20 buah / 12 = 1.666... Lusin.
+        // Product is sold per Lusin (12 buah, Rp 15.000/Lusin). Customer
+        // orders 1 Kodi (20 buah) via the unit dropdown — same logic as the
+        // admin Sales form's applyUnitConversion(): quantity/unit stay
+        // exactly as entered (1 Kodi, not converted into Lusin terms), and
+        // the price is recalculated per Kodi: 15000 * (20/12) = 25000.
         $product = Product::create([
             'product_name'         => 'Produk Test Kodi',
             'brand'                => 'Brand Test',
@@ -85,11 +92,15 @@ class TokoTest extends TestCase
             ]);
 
         $response->assertRedirect();
-        $keranjang = session('keranjang');
-        $item = $keranjang['product_' . $product->id];
+        $item = CartItem::where('user_id', $this->pembeli->id)
+            ->where('product_id', $product->id)
+            ->where('unit', 'Kodi')
+            ->firstOrFail();
 
-        $this->assertEquals('Lusin', $item['unit']);
-        $this->assertEqualsWithDelta(20 / 12, $item['quantity'], 0.001);
+        $this->assertEquals('Kodi', $item->unit);
+        $this->assertEquals(1, $item->quantity);
+        $this->assertEquals(25000, $item->price);
+        $this->assertEquals(25000, $item->subtotal);
     }
 
     public function test_tambah_keranjang_rejects_quantity_exceeding_stock()
@@ -116,7 +127,10 @@ class TokoTest extends TestCase
 
         $response->assertRedirect();
         $response->assertSessionHas('error');
-        $this->assertArrayNotHasKey('product_' . $product->id, session('keranjang', []));
+        $this->assertDatabaseMissing('cart_items', [
+            'user_id'    => $this->pembeli->id,
+            'product_id' => $product->id,
+        ]);
     }
 
     public function test_pembeli_can_checkout()
@@ -218,9 +232,8 @@ class TokoTest extends TestCase
         $this->assertEquals(2, $productB->fresh()->stock);
 
         // Both cart items are still there — nothing was lost.
-        $keranjang = session('keranjang');
-        $this->assertArrayHasKey('product_' . $productA->id, $keranjang);
-        $this->assertArrayHasKey('product_' . $productB->id, $keranjang);
+        $this->assertDatabaseHas('cart_items', ['user_id' => $this->pembeli->id, 'product_id' => $productA->id]);
+        $this->assertDatabaseHas('cart_items', ['user_id' => $this->pembeli->id, 'product_id' => $productB->id]);
     }
 
     public function test_pesanan_saya_shows_only_own_orders()
@@ -278,6 +291,82 @@ class TokoTest extends TestCase
 
         $response->assertSee('Pesanan Saya');
         $response->assertSee(route('toko.pesanan'), false);
+    }
+
+    public function test_cart_survives_logout_and_login()
+    {
+        $product = Product::create([
+            'product_name'         => 'Produk Persisten',
+            'brand'                => 'Brand Test',
+            'default_buy_price'    => 10000,
+            'default_buy_discount' => 0,
+            'sale_price'           => 15000,
+            'sale_unit'            => 'Buah',
+            'purchase_unit'        => 'Dus',
+            'dus_to_unit'          => 1,
+            'stock'                => 50,
+        ]);
+
+        $this->actingAs($this->pembeli)->post(route('toko.keranjang.tambah'), [
+            'product_id' => $product->id, 'quantity' => 3, 'unit' => 'Buah',
+        ]);
+
+        // Log out — this is the exact call the bug report pointed at:
+        // session()->invalidate() wipes the whole session, which is why a
+        // session-only cart used to disappear.
+        $this->post(route('logout'));
+
+        // Log back in as the same user (fresh session, new session ID).
+        $response = $this->actingAs($this->pembeli)->get(route('toko.keranjang'));
+
+        $response->assertStatus(200);
+        $response->assertSee('Produk Persisten');
+        $response->assertSee('45.000'); // 3 x 15.000, subtotal still correct
+
+        $this->assertDatabaseHas('cart_items', [
+            'user_id'    => $this->pembeli->id,
+            'product_id' => $product->id,
+            'quantity'   => 3,
+            'unit'       => 'Buah',
+        ]);
+    }
+
+    public function test_cart_is_scoped_per_user_not_shared()
+    {
+        $otherPembeli = User::create([
+            'name' => 'Pembeli Lain', 'email' => 'lain@test.com',
+            'password' => bcrypt('password'), 'role_id' => $this->pembeli->role_id,
+        ]);
+
+        $product = Product::create([
+            'product_name'         => 'Produk Bersama',
+            'sale_price'           => 15000,
+            'sale_unit'            => 'Buah',
+            'purchase_unit'        => 'Dus',
+            'dus_to_unit'          => 1,
+            'stock'                => 50,
+            'default_buy_price'    => 10000,
+            'default_buy_discount' => 0,
+        ]);
+
+        $this->actingAs($this->pembeli)->post(route('toko.keranjang.tambah'), [
+            'product_id' => $product->id, 'quantity' => 1, 'unit' => 'Buah',
+        ]);
+
+        $response = $this->actingAs($otherPembeli)->get(route('toko.keranjang'));
+
+        $response->assertStatus(200);
+        // Note: not asserting assertDontSee('Produk Bersama') here — the
+        // success flash message from the first actingAs() call ("Produk
+        // Bersama ditambahkan ke keranjang.") leaks into this response
+        // because actingAs() reuses one shared test session/cookie jar
+        // across both calls in this test, not because carts are actually
+        // shared between users. Assert the real outcome instead: the
+        // second user's cart is empty.
+        $response->assertSee('Keranjang kamu kosong.');
+        $this->assertDatabaseCount('cart_items', 1); // only $this->pembeli's row
+        $this->assertDatabaseHas('cart_items', ['user_id' => $this->pembeli->id, 'product_id' => $product->id]);
+        $this->assertDatabaseMissing('cart_items', ['user_id' => $otherPembeli->id]);
     }
 
     public function test_pemilik_cannot_access_toko()

@@ -22,7 +22,7 @@
                        class="relative text-sm font-medium text-gray-600 hover:text-indigo-600">
                         🆕 Produk Baru
                         @php
-                            $produkBaruCount = \App\Models\Product::newProducts()->unseenBy(auth()->id())->count();
+                            $produkBaruCount = \App\Models\Product::available()->newProducts()->unseenBy(auth()->id())->count();
                         @endphp
                         <span id="produk-baru-badge"
                             class="bg-red-500 text-white text-xs font-bold rounded-full px-1.5 py-0.5 {{ $produkBaruCount > 0 ? '' : 'hidden' }}">
@@ -40,7 +40,7 @@
                     <a href="{{ route('toko.keranjang') }}"
                        class="relative inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 rounded-md text-sm font-medium text-white hover:bg-indigo-500">
                         🛒 Keranjang
-                        @php $jumlahKeranjang = count(session('keranjang', [])); @endphp
+                        @php $jumlahKeranjang = \App\Models\CartItem::where('user_id', auth()->id())->count(); @endphp
                         @if($jumlahKeranjang > 0)
                             <span class="bg-red-500 text-white text-xs rounded-full px-1.5 py-0.5">
                                 {{ $jumlahKeranjang }}
@@ -149,15 +149,17 @@
                             Stok: {{ $product->stok_display }}
                         </p>
 
-                        <form action="{{ route('toko.keranjang.tambah') }}" method="POST">
+                        <form action="{{ route('toko.keranjang.tambah') }}" method="POST" class="unit-price-form">
                             @csrf
                             <input type="hidden" name="product_id" value="{{ $product->id }}">
-                            <div class="flex items-center gap-2 mb-2">
+                            <div class="flex items-center gap-2 mb-1">
                                 <input type="number" name="quantity"
                                     min="0.25" step="0.25" value="1"
-                                    class="w-20 text-sm border-gray-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                                    class="qty-input w-20 text-sm border-gray-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
                                 <select name="unit"
-                                    class="text-sm border-gray-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                                    data-price="{{ (float) $product->sale_price }}"
+                                    data-sale-unit="{{ strtolower($product->sale_unit) }}"
+                                    class="unit-select text-sm border-gray-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
                                     @foreach(['Buah', 'Lusin', 'Kodi', 'Gross'] as $option)
                                         <option value="{{ $option }}"
                                             {{ strtolower($product->sale_unit) === strtolower($option) ? 'selected' : '' }}>
@@ -166,6 +168,7 @@
                                     @endforeach
                                 </select>
                             </div>
+                            <p class="unit-price-preview text-xs text-gray-500 mb-2"></p>
                             <button type="submit"
                                 class="w-full py-2 bg-indigo-600 text-white text-xs font-semibold rounded-md hover:bg-indigo-500">
                                 + Keranjang
@@ -209,6 +212,63 @@
             </div>
         </div>
     </div>
+
+    {{-- Live price-per-unit preview: mirrors sales/create.blade.php's
+         applyUnitConversion() exactly — choosing the product's own
+         sale_unit never divides the price at all; a smaller unit divides
+         it down, a larger unit multiplies it up. The server (TokoController
+         ::tambahKeranjang()) computes the authoritative price the same way;
+         this is only a preview so the customer sees it before submitting. --}}
+    <script>
+        const UNIT_TO_BASE = {
+            buah: 1, pcs: 1, biji: 1, pak: 10, set: 6, lusin: 12, kodi: 20, gross: 144,
+        };
+
+        // Mirrors App\Services\UnitConverter::priceForUnit() on the backend —
+        // this is only a live preview; the server (TokoController::
+        // tambahKeranjang()) recomputes/validates the same way and is what
+        // actually gets persisted. No rounding when the two factors are
+        // equal (choosing the product's own sale_unit) — only when a real
+        // conversion happens.
+        function priceForUnit(basePrice, chosenFactor, saleFactor) {
+            if (chosenFactor === saleFactor) return basePrice;
+            return Math.ceil((basePrice * (chosenFactor / saleFactor)) / 1000) * 1000;
+        }
+
+        function updateUnitPricePreview(form) {
+            const select = form.querySelector('.unit-select');
+            const qtyInput = form.querySelector('.qty-input');
+            const preview = form.querySelector('.unit-price-preview');
+            if (!select || !preview) return;
+
+            const chosenUnit = select.value.trim().toLowerCase();
+            const saleUnit   = (select.dataset.saleUnit || '').trim().toLowerCase();
+            const basePrice  = parseFloat(select.dataset.price) || 0;
+
+            const chosenFactor = UNIT_TO_BASE[chosenUnit];
+            const saleFactor   = UNIT_TO_BASE[saleUnit];
+
+            if (!chosenFactor || !saleFactor) {
+                preview.textContent = '';
+                return;
+            }
+
+            const pricePerUnit = priceForUnit(basePrice, chosenFactor, saleFactor);
+            const qty = parseFloat(qtyInput?.value) || 0;
+            const subtotal = pricePerUnit * qty;
+
+            preview.textContent = `Rp ${pricePerUnit.toLocaleString('id-ID', { minimumFractionDigits: 0 })} / ${select.value}`
+                + (qty > 0 ? ` — Subtotal: Rp ${subtotal.toLocaleString('id-ID', { minimumFractionDigits: 0 })}` : '');
+        }
+
+        document.addEventListener('DOMContentLoaded', function () {
+            document.querySelectorAll('.unit-price-form').forEach(form => {
+                updateUnitPricePreview(form);
+                form.querySelector('.unit-select')?.addEventListener('change', () => updateUnitPricePreview(form));
+                form.querySelector('.qty-input')?.addEventListener('input', () => updateUnitPricePreview(form));
+            });
+        });
+    </script>
 
     {{-- Product Data --}}
     <script>

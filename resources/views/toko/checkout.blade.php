@@ -18,7 +18,7 @@
                 <div class="flex items-center gap-4">
                     <a href="{{ route('toko.index', ['filter' => 'baru']) }}" class="relative text-sm font-medium text-gray-600 hover:text-indigo-600">
                         🆕 Produk Baru
-                        @php $produkBaruCount = \App\Models\Product::newProducts()->unseenBy(auth()->id())->count(); @endphp
+                        @php $produkBaruCount = \App\Models\Product::available()->newProducts()->unseenBy(auth()->id())->count(); @endphp
                         @if($produkBaruCount > 0)
                             <span class="bg-red-500 text-white text-xs font-bold rounded-full px-1.5 py-0.5">
                                 {{ $produkBaruCount }}
@@ -105,14 +105,14 @@
                     @foreach($keranjang as $item)
                         <div class="flex items-center justify-between">
                             <div>
-                                <p class="text-sm font-medium text-gray-900">{{ $item['product_name'] }}</p>
+                                <p class="text-sm font-medium text-gray-900">{{ $item->product->product_name }}</p>
                                 <p class="text-xs text-gray-500">
-                                    {{ $item['quantity'] }} {{ $item['unit'] }} ×
-                                    Rp {{ number_format($item['price'], 0, ',', '.') }}
+                                    {{ $item->quantity }} {{ $item->unit }} ×
+                                    Rp {{ number_format($item->price, 0, ',', '.') }}
                                 </p>
                             </div>
                             <p class="text-sm font-semibold text-gray-900 whitespace-nowrap">
-                                Rp {{ number_format($item['subtotal'], 0, ',', '.') }}
+                                Rp {{ number_format($item->subtotal, 0, ',', '.') }}
                             </p>
                         </div>
                     @endforeach

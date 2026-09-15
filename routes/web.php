@@ -59,6 +59,8 @@ Route::middleware('auth')->group(function () {
         Route::match(['post', 'patch'], 'products/{product}/photo', [ProductController::class, 'updatePhoto'])->name('products.update-photo');
 
         Route::patch('sales/{id}/tandai-diproses', [SaleController::class, 'tandaiDiproses'])->name('sales.tandai-diproses');
+        Route::get('sales/{sale}/print-dotmatrix', [SaleController::class, 'printDotMatrix'])->name('sales.print-dotmatrix');
+        Route::get('sales/{sale}/print-text', [SaleController::class, 'printText'])->name('sales.print-text');
         Route::resource('sales', SaleController::class)->except(['destroy']);
     });
 

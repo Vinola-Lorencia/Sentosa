@@ -256,6 +256,16 @@
             kodi: 20,
             gross: 144,
         };
+
+        // Mirrors App\Services\UnitConverter::priceForUnit() on the backend —
+        // this is only a live preview; the server recomputes/validates the
+        // same way and is what actually gets persisted. No rounding at all
+        // when the two factors are equal (choosing the product's own
+        // sale_unit) — only when a real conversion happens.
+        function priceForUnit(basePrice, chosenFactor, saleFactor) {
+            if (chosenFactor === saleFactor) return basePrice;
+            return Math.ceil((basePrice * (chosenFactor / saleFactor)) / 1000) * 1000;
+        }
     </script>
 
     <script>
@@ -339,8 +349,7 @@
                 // Dus, Goni, Karton, atau ketikan bebas) dibiarkan manual.
                 if (!typedFactor || !saleFactor) return;
 
-                const newPrice = data.price * (typedFactor / saleFactor);
-                row.querySelector('.price-input').value = Math.round(newPrice * 100) / 100;
+                row.querySelector('.price-input').value = priceForUnit(data.price, typedFactor, saleFactor);
 
                 updateSubtotal(row);
             }

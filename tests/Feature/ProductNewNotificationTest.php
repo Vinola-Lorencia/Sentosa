@@ -28,7 +28,7 @@ class ProductNewNotificationTest extends TestCase
         ]);
     }
 
-    private function makeProduct(string $name, ?\Carbon\Carbon $createdAt = null): Product
+    private function makeProduct(string $name, ?\Carbon\Carbon $createdAt = null, float $stock = 10): Product
     {
         $product = Product::create([
             'product_name'         => $name,
@@ -36,7 +36,7 @@ class ProductNewNotificationTest extends TestCase
             'sale_unit'            => 'Buah',
             'purchase_unit'        => 'Dus',
             'dus_to_unit'          => 1,
-            'stock'                => 10,
+            'stock'                => $stock,
             'default_buy_price'    => 10000,
             'default_buy_discount' => 0,
         ]);
@@ -67,6 +67,41 @@ class ProductNewNotificationTest extends TestCase
             '/id="produk-baru-badge"[^>]*>\s*2\s*</',
             $response->getContent()
         );
+    }
+
+    public function test_navbar_badge_excludes_out_of_stock_new_products()
+    {
+        // Regression test: a new+unseen product with zero stock was
+        // previously counted by the badge (Product::newProducts()->unseenBy()
+        // has no stock check) but never appeared under ?filter=baru (the
+        // catalog's base query has always excluded stock=0 products) —
+        // badge showed 1, the filtered page showed 0. Both must now agree,
+        // via the shared Product::available() scope.
+        $inStock  = $this->makeProduct('Produk Baru Stok Ada', null, 10);
+        $outStock = $this->makeProduct('Produk Baru Stok Habis', null, 0);
+
+        $response = $this->actingAs($this->pembeli)->get(route('toko.index'));
+
+        $response->assertStatus(200);
+        $this->assertMatchesRegularExpression(
+            '/id="produk-baru-badge"[^>]*>\s*1\s*</',
+            $response->getContent()
+        );
+
+        $badgeCount  = Product::available()->newProducts()->unseenBy($this->pembeli->id)->count();
+        $filterCount = Product::available()->newProducts()->unseenBy($this->pembeli->id)
+            ->where('stock', '>', 0) // mirrors the catalog's base query explicitly
+            ->count();
+
+        $this->assertSame(1, $badgeCount);
+        $this->assertSame($badgeCount, $filterCount, 'Badge count and catalog filter count must always match.');
+
+        $filterResponse = $this->actingAs($this->pembeli)
+            ->get(route('toko.index', ['filter' => 'baru']));
+
+        $filterResponse->assertSee($inStock->product_name);
+        $filterResponse->assertDontSee($outStock->product_name);
+        $filterResponse->assertSee('Menampilkan 1 produk baru');
     }
 
     public function test_viewing_one_new_product_only_decrements_that_products_count()

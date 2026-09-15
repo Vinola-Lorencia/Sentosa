@@ -67,6 +67,19 @@ class Product extends Model
     }
 
     /**
+     * Products actually purchasable — the storefront catalog never lists
+     * out-of-stock products. Every place that counts/lists "produk baru"
+     * (the navbar badge and the ?filter=baru catalog query) must both build
+     * on this same scope, or they silently drift apart: a new-but-out-of-
+     * stock product would inflate the badge while never appearing in the
+     * catalog it's supposedly counting.
+     */
+    public function scopeAvailable($query)
+    {
+        return $query->where('stock', '>', 0);
+    }
+
+    /**
      * Products created within the last NEW_PRODUCT_DAYS days.
      */
     public function scopeNewProducts($query)

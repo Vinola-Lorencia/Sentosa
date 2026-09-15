@@ -148,6 +148,130 @@ class SaleController extends Controller
         return view('sales.show', compact('sale'));
     }
 
+    public function printDotMatrix(string $id)
+    {
+        $sale = Sale::with([
+            'customer',
+            'details.product',
+            'receivable',
+        ])->findOrFail($id);
+
+        return view('sales.print-dotmatrix', compact('sale'));
+    }
+
+    /**
+     * Plain-text nota for dot matrix Draft mode (e.g. Epson LX-310) — no
+     * HTML/CSS at all, since Draft mode is a raw character stream and any
+     * graphics-mode rendering (what browser printing produces, even for
+     * printDotMatrix()'s HTML view) forces the printer into much slower,
+     * more ribbon-hungry Letter Quality/graphics mode.
+     */
+    public function printText(string $id)
+    {
+        $sale = Sale::with([
+            'customer',
+            'details.product',
+            'receivable',
+        ])->findOrFail($id);
+
+        return response($this->buildTextNota($sale), 200, [
+            'Content-Type' => 'text/plain; charset=UTF-8',
+        ]);
+    }
+
+    /**
+     * Builds the fixed-width plain-text nota. 80 columns — the standard
+     * width for continuous-form dot matrix paper at 10 cpi.
+     */
+    private function buildTextNota(Sale $sale): string
+    {
+        $width = 80;
+        $lines = [];
+
+        $lines[] = str_pad('TOKO SENTOSA', $width, ' ', STR_PAD_BOTH);
+        $lines[] = str_pad('Jl. Bengkalis II No.91/93, Gang Buntu', $width, ' ', STR_PAD_BOTH);
+        $lines[] = str_pad('Medan Timur, Medan 20231', $width, ' ', STR_PAD_BOTH);
+        $lines[] = str_pad('Telp: 082364740128', $width, ' ', STR_PAD_BOTH);
+        $lines[] = str_repeat('=', $width);
+
+        $invoiceNo = 'INV-' . str_pad((string) $sale->sale_id, 3, '0', STR_PAD_LEFT);
+        $tanggal   = \Carbon\Carbon::parse($sale->sale_date)->format('d/m/Y');
+
+        $lines[] = sprintf('%-40s%s', "No. Nota  : {$invoiceNo}", "Tanggal   : {$tanggal}");
+        $lines[] = sprintf(
+            '%-40s%s',
+            'Pelanggan : ' . ($sale->customer->customer_name ?? 'Walk-in Customer'),
+            'Bayar     : ' . $sale->payment_method
+        );
+
+        if ($sale->customer?->address) {
+            $lines[] = 'Alamat    : ' . $sale->customer->address;
+        }
+
+        $lines[] = str_repeat('-', $width);
+
+        $itemFormat = '%-3s %-24s %5s %-8s %10s %6s %12s';
+        $lines[]    = sprintf($itemFormat, 'No', 'Nama Produk', 'Qty', 'Satuan', 'Harga', 'Disc', 'Subtotal');
+        $lines[]    = str_repeat('-', $width);
+
+        foreach ($sale->details as $i => $detail) {
+            $productName = $detail->product->product_name ?? '-';
+            $unit        = $detail->unit ?: $detail->product->sale_unit;
+
+            $lines[] = sprintf(
+                $itemFormat,
+                (string) ($i + 1),
+                substr($productName, 0, 24),
+                (string) $detail->quantity,
+                substr((string) $unit, 0, 8),
+                number_format((float) $detail->price, 0, ',', '.'),
+                $detail->discount . '%',
+                number_format((float) $detail->subtotal, 0, ',', '.')
+            );
+        }
+
+        $lines[] = str_repeat('-', $width);
+
+        $totalFormat = '%-63s%17s';
+        $lines[]     = sprintf($totalFormat, 'TOTAL KESELURUHAN', 'Rp ' . number_format((float) $sale->total_amount, 0, ',', '.'));
+
+        if ($sale->payment_status === 'Belum Bayar' && $sale->receivable) {
+            $lines[] = sprintf($totalFormat, 'SUDAH DIBAYAR', 'Rp ' . number_format((float) $sale->receivable->paid_amount, 0, ',', '.'));
+            $lines[] = sprintf($totalFormat, 'SISA TAGIHAN', 'Rp ' . number_format((float) $sale->receivable->remaining_amount, 0, ',', '.'));
+        }
+
+        $lines[] = '';
+
+        $statusLine = 'Status     : ' . $sale->payment_status;
+        if ($sale->payment_status === 'Belum Bayar' && $sale->receivable?->due_date) {
+            $statusLine .= '          Jatuh Tempo: ' . \Carbon\Carbon::parse($sale->receivable->due_date)->format('d/m/Y');
+        }
+        $lines[] = $statusLine;
+
+        if ($sale->notes) {
+            $lines[] = '';
+            $lines[] = 'Catatan: ' . $sale->notes;
+        }
+
+        $lines[] = '';
+        $lines[] = '';
+        $lines[] = sprintf('%-40s%s', str_pad('Penerima', 20, ' ', STR_PAD_BOTH), str_pad('Hormat Kami', 20, ' ', STR_PAD_BOTH));
+        $lines[] = '';
+        $lines[] = '';
+        $lines[] = sprintf(
+            '%-40s%s',
+            str_pad('......................', 30, ' ', STR_PAD_BOTH),
+            str_pad('......................', 30, ' ', STR_PAD_BOTH)
+        );
+        $lines[] = sprintf(
+            '%-40s%s',
+            str_pad($sale->customer->customer_name ?? 'Walk-in Customer', 30, ' ', STR_PAD_BOTH),
+            str_pad('Toko Sentosa', 30, ' ', STR_PAD_BOTH)
+        );
+
+        return implode("\n", $lines) . "\n";
+    }
+
     public function edit(string $id)
     {
         $sale      = Sale::with('details.product', 'receivable')->findOrFail($id);

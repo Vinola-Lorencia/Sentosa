@@ -20,6 +20,49 @@ class UnitConverter
     private const NON_STANDARD_UNITS = ['goni', 'dus', 'karton'];
 
     /**
+     * Recompute a sale_unit-quoted price into the price for a different
+     * chosen unit — e.g. a product priced per Lusin, sold to a customer who
+     * picked Buah. Rounded UP to the nearest Rp 1.000.
+     *
+     * This is the single source of truth for "harga per satuan dihitung
+     * dari hasil pembagian/perkalian konversi satuan" across the app (admin
+     * Sales form, storefront cart) — every call site must go through this
+     * instead of reimplementing the ratio + rounding itself, so the rule
+     * can never drift between places.
+     *
+     * Only standard units (see UNIT_TO_BASE) are recognized — matches the
+     * admin Sales form's own guard, which leaves the price untouched/manual
+     * for anything else (Dus/Goni/Karton, free-typed units).
+     *
+     * No real conversion happens when $chosenUnit equals $saleUnit (ratio
+     * 1:1) — the original price is returned completely untouched in that
+     * case, not rounded, since nothing was actually divided/multiplied.
+     */
+    public static function priceForUnit(float $basePrice, string $chosenUnit, string $saleUnit): float
+    {
+        $chosenUnit = strtolower(trim($chosenUnit));
+        $saleUnit   = strtolower(trim($saleUnit));
+
+        $chosenFactor = self::UNIT_TO_BASE[$chosenUnit] ?? null;
+        $saleFactor   = self::UNIT_TO_BASE[$saleUnit] ?? null;
+
+        if ($chosenFactor === null || $saleFactor === null || $chosenFactor === $saleFactor) {
+            return $basePrice;
+        }
+
+        return self::roundPriceUpToThousand($basePrice * ($chosenFactor / $saleFactor));
+    }
+
+    /**
+     * Round a price UP to the nearest Rp 1.000 (ceiling, never down):
+     * 25.833 -> 26.000, 25.100 -> 26.000, 25.000 -> 25.000 (already exact).
+     */
+    public static function roundPriceUpToThousand(float $price): float
+    {
+        return ceil($price / 1000) * 1000;
+    }
+
+    /**
      * Convert a quantity expressed in an arbitrary unit into true base units
      * (Buah) — i.e. how many individual pieces this quantity represents.
      * Independent of the product's sale_unit: "1 Kodi" is always 20 pieces,

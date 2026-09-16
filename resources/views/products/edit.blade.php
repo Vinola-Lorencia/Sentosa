@@ -53,7 +53,7 @@
                                     file:bg-indigo-50 file:text-indigo-700
                                     hover:file:bg-indigo-100"
                                 onchange="previewImage(event)">
-                            <p class="text-xs text-gray-400 mt-1">JPG, PNG, WEBP. Maks 2MB. Kosongkan jika tidak ingin mengubah gambar.</p>
+                            <p class="text-xs text-gray-400 mt-1">JPG, PNG, WEBP. Maks 10MB (otomatis dikompres). Kosongkan jika tidak ingin mengubah gambar.</p>
                             <x-input-error :messages="$errors->get('image')" class="mt-2" />
 
                             {{-- Preview gambar baru --}}

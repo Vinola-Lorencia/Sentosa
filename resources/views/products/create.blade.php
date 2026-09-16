@@ -39,7 +39,7 @@
                                     hover:file:bg-indigo-100"
                                 onchange="previewImage(event)"
                                 required>
-                            <p class="text-xs text-gray-400 mt-1">JPG, PNG, WEBP. Maks 2MB.</p>
+                            <p class="text-xs text-gray-400 mt-1">JPG, PNG, WEBP. Maks 10MB (otomatis dikompres).</p>
                             <x-input-error :messages="$errors->get('image')" class="mt-2" />
 
                             {{-- Preview --}}

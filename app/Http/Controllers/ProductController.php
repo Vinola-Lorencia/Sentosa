@@ -3,14 +3,17 @@
 namespace App\Http\Controllers;
 
 use App\Models\Product;
+use App\Services\ImageCompressionService;
 use App\Services\SupabaseStorageService;
 use App\Services\UnitConverter;
 use Illuminate\Http\Request;
 
 class ProductController extends Controller
 {
-    public function __construct(private SupabaseStorageService $supabaseStorage)
-    {
+    public function __construct(
+        private SupabaseStorageService $supabaseStorage,
+        private ImageCompressionService $imageCompression,
+    ) {
     }
 
     public function index(Request $request)
@@ -80,7 +83,11 @@ class ProductController extends Controller
             'product_name'         => ['required', 'string', 'max:255', 'unique:products,product_name'],
             'stock_qty'            => ['required', 'numeric', 'min:0'],
             'stock_unit'           => ['required', 'in:Buah,Lusin,Kodi,Gross'],
-            'image'                => ['required', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
+            // 10MB cap on the ORIGINAL upload — compression happens after
+            // validation passes (see storeProductPhoto()), so this only
+            // needs to be generous enough for raw high-res phone camera
+            // photos, not the final stored size.
+            'image'                => ['required', 'image', 'mimes:jpg,jpeg,png,webp', 'max:10240'],
             'brand'                => ['nullable', 'string', 'max:255'],
             'default_buy_price'    => ['nullable', 'numeric', 'min:0'],
             'default_buy_discount' => ['nullable', 'numeric', 'min:0', 'max:100'],
@@ -200,7 +207,7 @@ class ProductController extends Controller
             'product_name'         => ['required', 'string', 'max:255'],
             'sale_price'           => ['required', 'numeric', 'min:0'],
             'brand'                => ['nullable', 'string', 'max:255'],
-            'image'                => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
+            'image'                => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:10240'],
             'default_buy_price'    => ['required', 'numeric', 'min:0'],
             'default_buy_discount' => ['required', 'numeric', 'min:0'],
             'sale_unit'            => ['required', 'string', 'max:50'],
@@ -254,7 +261,7 @@ class ProductController extends Controller
     public function updatePhoto(Request $request, Product $product)
     {
         $request->validate([
-            'image' => ['required', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
+            'image' => ['required', 'image', 'mimes:jpg,jpeg,png,webp', 'max:10240'],
         ]);
 
         $product->update([
@@ -279,8 +286,12 @@ class ProductController extends Controller
             $this->supabaseStorage->delete($oldPath);
         }
 
-        $path = 'products/' . uniqid('product_', true) . '.' . $file->getClientOriginalExtension();
+        // Resize/recompress before it ever reaches Supabase — always JPEG
+        // out, so the extension here no longer follows the original upload.
+        $compressed = $this->imageCompression->compress($file);
 
-        return $this->supabaseStorage->upload($file, $path);
+        $path = 'products/' . uniqid('product_', true) . '.jpg';
+
+        return $this->supabaseStorage->upload($compressed, $path);
     }
 }

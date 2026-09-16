@@ -184,7 +184,7 @@
                         file:border-0 file:text-sm file:font-semibold
                         file:bg-indigo-50 file:text-indigo-700
                         hover:file:bg-indigo-100">
-                <p class="text-xs text-gray-400 mb-1">JPG, PNG, WEBP. Maks 2MB.</p>
+                <p class="text-xs text-gray-400 mb-1">JPG, PNG, WEBP. Maks 10MB (otomatis dikompres).</p>
                 <p id="photo-modal-error" class="hidden text-xs text-red-600 mb-2"></p>
 
                 <div class="flex items-center justify-end gap-2 mt-4">

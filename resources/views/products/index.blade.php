@@ -90,12 +90,12 @@
                             {{-- Foto produk (klik untuk upload/ganti) --}}
                             <button type="button"
                                 onclick="openPhotoModal({{ $product->id }}, @js($product->product_name))"
-                                class="group relative block w-full h-36 bg-gray-100 overflow-hidden">
+                                class="group relative block w-full h-48 bg-gray-100 overflow-hidden">
                                 <div data-product-photo="{{ $product->id }}" class="h-full w-full flex items-center justify-center">
                                     @if($product->image_path)
                                         <img src="{{ app(\App\Services\SupabaseStorageService::class)->getPublicUrl($product->image_path) }}"
                                             alt="{{ $product->product_name }}"
-                                            class="h-full w-full object-cover">
+                                            class="h-full w-full object-contain">
                                     @else
                                         <div class="h-full w-full bg-gray-300"></div>
                                     @endif
@@ -258,7 +258,7 @@
                 .then((data) => {
                     const target = document.querySelector(`[data-product-photo="${productId}"]`);
                     if (target) {
-                        target.innerHTML = `<img src="${data.image_url}" class="h-full w-full object-cover" alt="">`;
+                        target.innerHTML = `<img src="${data.image_url}" class="h-full w-full object-contain" alt="">`;
                     }
                     closePhotoModal();
                 })

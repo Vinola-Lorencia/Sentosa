@@ -75,7 +75,7 @@
                     {{-- Gambar produk (klik untuk lihat detail) --}}
                     <button type="button"
                         onclick="openProductDetailModal({{ $product->id }})"
-                        class="relative block w-full h-36 bg-gray-100 flex items-center justify-center overflow-hidden">
+                        class="relative block w-full h-48 bg-gray-100 flex items-center justify-center overflow-hidden">
                         @if($isBaru)
                             <span data-baru-badge="{{ $product->id }}"
                                 class="absolute top-1.5 left-1.5 z-10 bg-red-500 text-white text-[10px] font-bold rounded-full px-2 py-0.5">
@@ -85,7 +85,7 @@
                         @if($product->image_path)
                             <img src="{{ app(\App\Services\SupabaseStorageService::class)->getPublicUrl($product->image_path) }}"
                                 alt="{{ $product->product_name }}"
-                                class="h-full w-full object-cover">
+                                class="h-full w-full object-contain">
                         @else
                             <span class="text-4xl">📦</span>
                         @endif
@@ -148,7 +148,7 @@
     <div id="product-detail-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
         <div class="bg-white rounded-lg shadow-lg w-full max-w-sm overflow-hidden">
             <div class="h-48 bg-gray-100 flex items-center justify-center overflow-hidden">
-                <img id="product-detail-image" src="" alt="" class="hidden h-full w-full object-cover">
+                <img id="product-detail-image" src="" alt="" class="hidden h-full w-full object-contain">
                 <span id="product-detail-placeholder" class="text-5xl">📦</span>
             </div>
             <div class="p-6">

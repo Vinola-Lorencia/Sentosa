@@ -8,34 +8,7 @@
 </head>
 <body class="bg-gray-50 font-sans">
 
-    <nav class="bg-white border-b border-gray-200 sticky top-0 z-50">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="flex items-center justify-between h-16">
-                <a href="{{ route('toko.index') }}" class="text-indigo-600 hover:text-indigo-800 text-sm">
-                    ← Lanjut Belanja
-                </a>
-                <span class="font-bold text-gray-900">Tagihan Saya</span>
-                <div class="flex items-center gap-4">
-                    <a href="{{ route('toko.index', ['filter' => 'baru']) }}" class="relative text-sm font-medium text-gray-600 hover:text-indigo-600">
-                        🆕 Produk Baru
-                        @php $produkBaruCount = \App\Models\Product::available()->newProducts()->unseenBy(auth()->id())->count(); @endphp
-                        @if($produkBaruCount > 0)
-                            <span class="bg-red-500 text-white text-xs font-bold rounded-full px-1.5 py-0.5">
-                                {{ $produkBaruCount }}
-                            </span>
-                        @endif
-                    </a>
-                    <a href="{{ route('toko.pesanan') }}" class="text-sm font-medium text-gray-600 hover:text-indigo-600">
-                        Pesanan Saya
-                    </a>
-                    <a href="{{ route('toko.keranjang') }}" class="text-sm font-medium text-gray-600 hover:text-indigo-600">
-                        Keranjang
-                    </a>
-                    <span class="text-sm text-gray-600">{{ Auth::user()->name }}</span>
-                </div>
-            </div>
-        </div>
-    </nav>
+    @include('toko.partials.navbar')
 
     <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 

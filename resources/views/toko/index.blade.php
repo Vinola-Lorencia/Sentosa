@@ -9,53 +9,7 @@
 </head>
 <body class="bg-gray-50 font-sans">
 
-    {{-- Navbar --}}
-    <nav class="bg-white border-b border-gray-200 sticky top-0 z-50">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="flex items-center justify-between h-16">
-                <div class="flex items-center gap-3">
-                    <img src="{{ asset('images/logo.jpeg') }}" class="h-8 w-8 rounded-lg object-cover">
-                    <span class="font-bold text-gray-900">Toko Sentosa</span>
-                </div>
-                <div class="flex items-center gap-4">
-                    <a href="{{ route('toko.index', ['filter' => 'baru']) }}"
-                       class="relative text-sm font-medium text-gray-600 hover:text-indigo-600">
-                        🆕 Produk Baru
-                        @php
-                            $produkBaruCount = \App\Models\Product::available()->newProducts()->unseenBy(auth()->id())->count();
-                        @endphp
-                        <span id="produk-baru-badge"
-                            class="bg-red-500 text-white text-xs font-bold rounded-full px-1.5 py-0.5 {{ $produkBaruCount > 0 ? '' : 'hidden' }}">
-                            {{ $produkBaruCount }}
-                        </span>
-                    </a>
-                    <a href="{{ route('toko.pesanan') }}"
-                       class="text-sm font-medium text-gray-600 hover:text-indigo-600">
-                        Pesanan Saya
-                    </a>
-                    <a href="{{ route('toko.tagihan') }}"
-                       class="text-sm font-medium text-gray-600 hover:text-indigo-600">
-                        Tagihan Saya
-                    </a>
-                    <a href="{{ route('toko.keranjang') }}"
-                       class="relative inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 rounded-md text-sm font-medium text-white hover:bg-indigo-500">
-                        🛒 Keranjang
-                        @php $jumlahKeranjang = \App\Models\CartItem::where('user_id', auth()->id())->count(); @endphp
-                        @if($jumlahKeranjang > 0)
-                            <span class="bg-red-500 text-white text-xs rounded-full px-1.5 py-0.5">
-                                {{ $jumlahKeranjang }}
-                            </span>
-                        @endif
-                    </a>
-                    <span class="text-sm text-gray-600">{{ Auth::user()->name }}</span>
-                    <form method="POST" action="{{ route('logout') }}">
-                        @csrf
-                        <button class="text-sm text-red-600 hover:text-red-800">Logout</button>
-                    </form>
-                </div>
-            </div>
-        </div>
-    </nav>
+    @include('toko.partials.navbar')
 
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 

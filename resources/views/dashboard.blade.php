@@ -298,7 +298,7 @@
                                             {{ $product->creator->name ?? '-' }}
                                         </td>
                                         <td class="py-2 text-right text-xs text-gray-500 whitespace-nowrap">
-                                            {{ $product->created_at?->format('d M Y H:i') ?? '-' }}
+                                            {{ $product->created_at?->toWib()->format('d M Y H:i') ?? '-' }}
                                         </td>
                                         <td class="py-2 text-right text-xs whitespace-nowrap">
                                             <a href="{{ route('products.edit', $product->id) }}"

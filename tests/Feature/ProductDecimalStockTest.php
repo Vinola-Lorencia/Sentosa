@@ -39,7 +39,8 @@ class ProductDecimalStockTest extends TestCase
             'sale_unit'            => 'Lusin',
             'purchase_unit'        => 'Goni',
             'dus_to_unit'          => 1.5,
-            'stock'                => 39.5,
+            'stock_qty'            => 39.5,
+            'stock_unit'           => 'Buah',
         ], $overrides);
     }
 
@@ -50,9 +51,7 @@ class ProductDecimalStockTest extends TestCase
         $response = $this->actingAs($this->user)->post(
             route('products.store'),
             $this->payload([
-                'stock_qty'  => 39.5,
-                'stock_unit' => 'Buah',
-                'image'      => UploadedFile::fake()->image('produk.jpg'),
+                'image' => UploadedFile::fake()->image('produk.jpg'),
             ])
         );
 
@@ -78,7 +77,7 @@ class ProductDecimalStockTest extends TestCase
         ]);
 
         $response = $this->actingAs($this->user)
-            ->put(route('products.update', $product), $this->payload(['stock' => 38.5]));
+            ->put(route('products.update', $product), $this->payload(['stock_qty' => 38.5]));
 
         $response->assertRedirect(route('products.index'));
         $response->assertSessionDoesntHaveErrors();

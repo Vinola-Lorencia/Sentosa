@@ -121,9 +121,26 @@
                         </div>
 
                         <div>
-                            <x-input-label for="stock" :value="__('Stock')" />
-                            <x-text-input id="stock" name="stock" type="number" step="any" class="mt-1 block w-full" value="{{ old('stock', $product->stock) }}" required />
-                            <x-input-error :messages="$errors->get('stock')" class="mt-2" />
+                            <x-input-label :value="__('Stock')" />
+                            <div class="mt-1 grid grid-cols-2 gap-4">
+                                <div>
+                                    <x-text-input id="stock_qty" name="stock_qty" type="number" step="any" min="0" class="block w-full" value="{{ old('stock_qty', $product->stock) }}" required />
+                                    <x-input-error :messages="$errors->get('stock_qty')" class="mt-2" />
+                                </div>
+                                <div>
+                                    <select id="stock_unit" name="stock_unit"
+                                        class="block w-full border-gray-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                        required>
+                                        @foreach(['Buah', 'Lusin', 'Kodi', 'Gross'] as $option)
+                                            <option value="{{ $option }}"
+                                                {{ strtolower(old('stock_unit', 'Buah')) === strtolower($option) ? 'selected' : '' }}>
+                                                {{ $option }}
+                                            </option>
+                                        @endforeach
+                                    </select>
+                                    <x-input-error :messages="$errors->get('stock_unit')" class="mt-2" />
+                                </div>
+                            </div>
                         </div>
 
                         <div class="flex items-center justify-end gap-4">

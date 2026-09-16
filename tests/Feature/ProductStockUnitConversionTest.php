@@ -85,4 +85,120 @@ class ProductStockUnitConversionTest extends TestCase
 
         $response->assertSessionHasErrors('stock_unit');
     }
+
+    private function baseUpdatePayload(array $overrides = []): array
+    {
+        return array_merge([
+            'product_name'         => 'Produk Edit Test',
+            'sale_price'           => 15000,
+            'default_buy_price'    => 10000,
+            'default_buy_discount' => 0,
+            'sale_unit'            => 'Buah',
+            'purchase_unit'        => 'Dus',
+            'dus_to_unit'          => 1,
+            'stock_qty'            => 5,
+            'stock_unit'           => 'Buah',
+        ], $overrides);
+    }
+
+    public function test_edit_5_lusin_converts_stock_to_60_buah()
+    {
+        $product = Product::create([
+            'product_name'         => 'Produk Awal',
+            'sale_price'           => 15000,
+            'sale_unit'            => 'Buah',
+            'purchase_unit'        => 'Dus',
+            'dus_to_unit'          => 1,
+            'stock'                => 5,
+            'default_buy_price'    => 10000,
+            'default_buy_discount' => 0,
+        ]);
+
+        $response = $this->actingAs($this->user)->put(
+            route('products.update', $product),
+            $this->baseUpdatePayload([
+                'product_name' => $product->product_name,
+                'stock_qty'    => 5,
+                'stock_unit'   => 'Lusin',
+            ])
+        );
+
+        $response->assertRedirect(route('products.index'));
+        $response->assertSessionDoesntHaveErrors();
+
+        $this->assertEquals(60.0, (float) $product->refresh()->stock);
+    }
+
+    public function test_edit_1_kodi_converts_stock_to_20_buah()
+    {
+        $product = Product::create([
+            'product_name'         => 'Produk Kodi Awal',
+            'sale_price'           => 15000,
+            'sale_unit'            => 'Buah',
+            'purchase_unit'        => 'Dus',
+            'dus_to_unit'          => 1,
+            'stock'                => 100,
+            'default_buy_price'    => 10000,
+            'default_buy_discount' => 0,
+        ]);
+
+        $response = $this->actingAs($this->user)->put(
+            route('products.update', $product),
+            $this->baseUpdatePayload([
+                'product_name' => $product->product_name,
+                'stock_qty'    => 1,
+                'stock_unit'   => 'Kodi',
+            ])
+        );
+
+        $response->assertRedirect(route('products.index'));
+        $response->assertSessionDoesntHaveErrors();
+
+        $this->assertEquals(20.0, (float) $product->refresh()->stock);
+    }
+
+    public function test_edit_missing_stock_unit_fails_validation()
+    {
+        $product = Product::create([
+            'product_name'         => 'Produk No Unit',
+            'sale_price'           => 15000,
+            'sale_unit'            => 'Buah',
+            'purchase_unit'        => 'Dus',
+            'dus_to_unit'          => 1,
+            'stock'                => 5,
+            'default_buy_price'    => 10000,
+            'default_buy_discount' => 0,
+        ]);
+
+        $payload = $this->baseUpdatePayload(['product_name' => $product->product_name]);
+        unset($payload['stock_unit']);
+
+        $response = $this->actingAs($this->user)->put(route('products.update', $product), $payload);
+
+        $response->assertSessionHasErrors('stock_unit');
+    }
+
+    public function test_edit_invalid_stock_unit_rejected()
+    {
+        $product = Product::create([
+            'product_name'         => 'Produk Bad Unit',
+            'sale_price'           => 15000,
+            'sale_unit'            => 'Buah',
+            'purchase_unit'        => 'Dus',
+            'dus_to_unit'          => 1,
+            'stock'                => 5,
+            'default_buy_price'    => 10000,
+            'default_buy_discount' => 0,
+        ]);
+
+        $response = $this->actingAs($this->user)->put(
+            route('products.update', $product),
+            $this->baseUpdatePayload([
+                'product_name' => $product->product_name,
+                'stock_unit'   => 'Dus',
+            ])
+        );
+
+        $response->assertSessionHasErrors('stock_unit');
+    }
 }

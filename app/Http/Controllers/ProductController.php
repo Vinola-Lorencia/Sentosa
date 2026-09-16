@@ -189,7 +189,7 @@ class ProductController extends Controller
                     'stock'        => (float) $product->stock,
                     'stok_display' => $product->stok_display,
                     'activity'     => $isPhotoActivity ? 'Mengubah Foto' : 'Menambah Produk',
-                    'created_at'   => $activityAt?->format('d M Y H:i') ?? '-',
+                    'created_at'   => $activityAt?->toWib()->format('d M Y H:i') ?? '-',
                     'edit_url'     => route('products.edit', $product->id),
                 ];
             }),
@@ -213,8 +213,14 @@ class ProductController extends Controller
             'sale_unit'            => ['required', 'string', 'max:50'],
             'purchase_unit'        => ['required', 'string', 'max:50'],
             'dus_to_unit'          => ['required', 'numeric', 'min:0.01'],
-            'stock'                => ['required', 'numeric', 'min:0'],
+            'stock_qty'            => ['required', 'numeric', 'min:0'],
+            'stock_unit'           => ['required', 'in:Buah,Lusin,Kodi,Gross'],
         ]);
+
+        // stock is always stored in Buah — same conversion as store().
+        $factor = UnitConverter::UNIT_TO_BASE[strtolower($data['stock_unit'])] ?? 1;
+        $data['stock'] = (float) $data['stock_qty'] * $factor;
+        unset($data['stock_qty'], $data['stock_unit']);
 
         unset($data['image']);
 

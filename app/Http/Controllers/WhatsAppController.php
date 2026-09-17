@@ -918,10 +918,54 @@ Balas dalam format JSON:
 
     private function sendMessage(string $to, string $body, ?string $mediaUrl = null): void
     {
-        if (env('WHATSAPP_PROVIDER', 'twilio') === 'meta') {
+        $provider = env('WHATSAPP_PROVIDER', 'twilio');
+
+        if ($provider === 'fonnte') {
+            $this->sendViaFonnte($to, $body, $mediaUrl);
+        } elseif ($provider === 'meta') {
             $this->sendViaMeta($to, $body, $mediaUrl);
         } else {
             $this->sendViaTwilio($to, $body, $mediaUrl);
+        }
+    }
+
+    private function sendViaFonnte(string $to, string $body, ?string $mediaUrl = null): void
+    {
+        // Fonnte's "target" is the bare number (62xxx), no whatsapp:/+ prefix —
+        // same normalized $to format every provider's send method receives.
+        $target = preg_replace('/^whatsapp:\+?/', '', $to);
+
+        $payload = [
+            'target'  => $target,
+            'message' => $body,
+        ];
+
+        if ($mediaUrl) {
+            $payload['url'] = $mediaUrl;
+        }
+
+        try {
+            $response = Http::asForm()
+                ->withHeaders(['Authorization' => config('services.fonnte.token')])
+                ->timeout(15)
+                ->connectTimeout(10)
+                // One retry after a transient network/timeout failure only —
+                // never retries on a 4xx/5xx response from Fonnte itself.
+                ->retry(2, 500, fn ($e) => $e instanceof \Illuminate\Http\Client\ConnectionException)
+                ->post('https://api.fonnte.com/send', $payload);
+
+            if (!$response->successful()) {
+                Log::error('Fonnte send failed', [
+                    'to'     => $target,
+                    'status' => $response->status(),
+                    'body'   => $response->body(),
+                ]);
+            }
+        } catch (\Illuminate\Http\Client\ConnectionException $e) {
+            Log::error('Fonnte send failed: connection error after retry', [
+                'to'    => $target,
+                'error' => $e->getMessage(),
+            ]);
         }
     }
 
@@ -1007,7 +1051,40 @@ Balas dalam format JSON:
         if ($request->input('object') === 'whatsapp_business_account') {
             return $this->parseMetaIncoming($request);
         }
+        if ($request->has('sender') || $request->has('device')) {
+            return $this->parseFonnteIncoming($request);
+        }
         return $this->parseTwilioIncoming($request);
+    }
+
+    // Fonnte's WhatsApp buttons stopped working platform-wide when WhatsApp
+    // changed how it verifies button senders (May 2023) — Fonnte no longer
+    // maintains the feature. The webhook still always sends a "text" field,
+    // but for an ordinary (non-button) message it's just this literal
+    // sentinel, never the customer's actual message.
+    private const FONNTE_NON_BUTTON_TEXT = 'non-button message';
+
+    private function parseFonnteIncoming(Request $request): array
+    {
+        $sender = $request->input('sender');
+
+        if (!$sender) {
+            return [null, ''];
+        }
+
+        // Normalize to the same 'whatsapp:+62xxx' shape every other provider's
+        // parser produces, so WhatsAppSession lookups stay provider-agnostic.
+        $digits = preg_replace('/\D/', '', (string) $sender);
+        $from   = 'whatsapp:+' . $digits;
+
+        // "text" only carries real content for an actual button/list reply —
+        // otherwise it's always the "non-button message" placeholder, so it
+        // must be ignored in that case and "message" used instead.
+        $text        = trim((string) $request->input('text', ''));
+        $isRealButton = $text !== '' && strtolower($text) !== self::FONNTE_NON_BUTTON_TEXT;
+        $body         = $isRealButton ? $text : $request->input('message', '');
+
+        return [$from, (string) $body];
     }
 
     private function parseTwilioIncoming(Request $request): array

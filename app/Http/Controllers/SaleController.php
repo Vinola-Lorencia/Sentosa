@@ -8,7 +8,7 @@ use App\Models\Receivable;
 use App\Models\Sale;
 use App\Models\SaleDetail;
 use App\Services\UnitConverter;
-
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -27,7 +27,7 @@ class SaleController extends Controller
     public function create()
     {
         $customers = Customer::all();
-        $products  = Product::where('stock', '>', 0)->get();
+        $products = Product::where('stock', '>', 0)->get();
 
         return view('sales.create', compact('customers', 'products'));
     }
@@ -35,19 +35,19 @@ class SaleController extends Controller
     public function store(Request $request)
     {
         $request->validate([
-            'sale_date'      => 'required|date',
+            'sale_date' => 'required|date',
             'payment_method' => 'required|in:Cash,Transfer,Utang',
             'payment_status' => 'required|in:Lunas,Belum Bayar',
-            'notes'          => 'nullable|string',
-            'product_id'     => 'required|array|min:1',
-            'product_id.*'   => 'required|exists:products,id',
-            'quantity'       => 'required|array',
-            'quantity.*'     => 'required|numeric|min:0.25',
-            'price'          => 'required|array',
-            'price.*'        => 'required|numeric|min:0',
-            'discount'       => 'required|array',
-            'discount.*'     => 'required|numeric|min:0|max:100',
-            'due_date'       => 'nullable|date',
+            'notes' => 'nullable|string',
+            'product_id' => 'required|array|min:1',
+            'product_id.*' => 'required|exists:products,id',
+            'quantity' => 'required|array',
+            'quantity.*' => 'required|numeric|min:0.25',
+            'price' => 'required|array',
+            'price.*' => 'required|numeric|min:0',
+            'discount' => 'required|array',
+            'discount.*' => 'required|numeric|min:0|max:100',
+            'due_date' => 'nullable|date',
         ]);
 
         try {
@@ -55,9 +55,9 @@ class SaleController extends Controller
 
                 $productIds = $request->product_id;
                 $quantities = $request->quantity;
-                $prices     = $request->price;
-                $discounts  = $request->discount;
-                $units      = $request->unit;
+                $prices = $request->price;
+                $discounts = $request->discount;
+                $units = $request->unit;
 
                 // Cek stok dulu (dikonversi ke sale_unit)
                 foreach ($productIds as $i => $productId) {
@@ -71,39 +71,39 @@ class SaleController extends Controller
                 // Hitung total
                 $totalAmount = 0;
                 foreach ($productIds as $i => $productId) {
-                    $qty      = $quantities[$i];
-                    $price    = $prices[$i];
+                    $qty = $quantities[$i];
+                    $price = $prices[$i];
                     $discount = $discounts[$i] ?? 0;
                     $totalAmount += $qty * $price * (1 - $discount / 100);
                 }
 
                 // Simpan header sale
-                $sale = new Sale();
-                $sale->customer_id    = $request->customer_id ?: null;
-                $sale->user_id        = Auth::id();
-                $sale->sale_date      = $request->sale_date;
+                $sale = new Sale;
+                $sale->customer_id = $request->customer_id ?: null;
+                $sale->user_id = Auth::id();
+                $sale->sale_date = $request->sale_date;
                 $sale->payment_method = $request->payment_method;
                 $sale->payment_status = $request->payment_status;
-                $sale->paid_date      = $request->payment_status === 'Lunas' ? $request->sale_date : null;
-                $sale->total_amount   = $totalAmount;
-                $sale->notes          = $request->notes;
+                $sale->paid_date = $request->payment_status === 'Lunas' ? $request->sale_date : null;
+                $sale->total_amount = $totalAmount;
+                $sale->notes = $request->notes;
                 $sale->save();
 
                 // Simpan detail + kurangi stok
                 foreach ($productIds as $i => $productId) {
-                    $qty      = $quantities[$i];
-                    $price    = $prices[$i];
+                    $qty = $quantities[$i];
+                    $price = $prices[$i];
                     $discount = $discounts[$i] ?? 0;
                     $subtotal = $qty * $price * (1 - $discount / 100);
 
-                    $detail = new SaleDetail();
-                    $detail->sale_id    = $sale->sale_id;
+                    $detail = new SaleDetail;
+                    $detail->sale_id = $sale->sale_id;
                     $detail->product_id = $productId;
-                    $detail->quantity   = $qty;
-                    $detail->unit       = $units[$i] ?? '';
-                    $detail->price      = $price;
-                    $detail->discount   = $discount;
-                    $detail->subtotal   = $subtotal;
+                    $detail->quantity = $qty;
+                    $detail->unit = $units[$i] ?? '';
+                    $detail->price = $price;
+                    $detail->discount = $discount;
+                    $detail->subtotal = $subtotal;
                     $detail->save();
 
                     $product = Product::findOrFail($productId);
@@ -114,14 +114,14 @@ class SaleController extends Controller
 
                 // Buat receivable kalau Belum Bayar
                 if ($request->payment_status === 'Belum Bayar') {
-                    $receivable = new Receivable();
-                    $receivable->sale_id          = $sale->sale_id;
-                    $receivable->customer_id      = $sale->customer_id;
-                    $receivable->due_date         = $request->due_date;
-                    $receivable->amount           = $totalAmount;
-                    $receivable->paid_amount      = 0;
+                    $receivable = new Receivable;
+                    $receivable->sale_id = $sale->sale_id;
+                    $receivable->customer_id = $sale->customer_id;
+                    $receivable->due_date = $request->due_date;
+                    $receivable->amount = $totalAmount;
+                    $receivable->paid_amount = 0;
                     $receivable->remaining_amount = $totalAmount;
-                    $receivable->status           = 'Unpaid';
+                    $receivable->status = 'Unpaid';
                     $receivable->save();
                 }
             });
@@ -180,83 +180,91 @@ class SaleController extends Controller
     }
 
     /**
-     * Builds the fixed-width plain-text nota. 80 columns — the standard
-     * width for continuous-form dot matrix paper at 10 cpi.
+     * Builds the fixed-width plain-text nota. 70 columns — intentionally
+     * narrower than the printer's nominal 80-column width at 10 cpi, to
+     * leave a safety margin for LX dot matrix units whose physical print
+     * margins aren't precisely 80 columns.
      */
     private function buildTextNota(Sale $sale): string
     {
-        $width = 80;
+        // 70 (not the printer's nominal 80) — leaves a safety margin on both
+        // sides for LX dot matrix units whose physical print margins aren't
+        // precisely 80 columns, so content doesn't bleed past the
+        // continuous-form paper's edge/perforation.
+        $width = 70;
         $lines = [];
 
         $lines[] = str_pad('TOKO SENTOSA', $width, ' ', STR_PAD_BOTH);
-        $lines[] = str_pad('Jl. Bengkalis II No.91/93, Gang Buntu', $width, ' ', STR_PAD_BOTH);
-        $lines[] = str_pad('Medan Timur, Medan 20231', $width, ' ', STR_PAD_BOTH);
+        $lines[] = str_pad('Jl. Bengkalis II No.91/93, Gang Buntu, Medan Timur, Medan 20231', $width, ' ', STR_PAD_BOTH);
         $lines[] = str_pad('Telp: 082364740128', $width, ' ', STR_PAD_BOTH);
         $lines[] = str_repeat('=', $width);
 
-        $invoiceNo = 'INV-' . str_pad((string) $sale->sale_id, 3, '0', STR_PAD_LEFT);
-        $tanggal   = \Carbon\Carbon::parse($sale->sale_date)->format('d/m/Y');
+        $invoiceNo = 'INV-'.str_pad((string) $sale->sale_id, 3, '0', STR_PAD_LEFT);
+        $tanggal = Carbon::parse($sale->sale_date)->format('d/m/Y');
 
         $lines[] = sprintf('%-40s%s', "No. Nota  : {$invoiceNo}", "Tanggal   : {$tanggal}");
         $lines[] = sprintf(
             '%-40s%s',
-            'Pelanggan : ' . ($sale->customer->customer_name ?? 'Walk-in Customer'),
-            'Bayar     : ' . $sale->payment_method
+            'Pelanggan : '.($sale->customer->customer_name ?? 'Walk-in Customer'),
+            'Bayar     : '.$sale->payment_method
         );
 
         if ($sale->customer?->address) {
-            $lines[] = 'Alamat    : ' . $sale->customer->address;
+            $lines[] = 'Alamat    : '.$sale->customer->address;
         }
 
         $lines[] = str_repeat('-', $width);
 
-        $itemFormat = '%-3s %-24s %5s %-8s %10s %6s %12s';
-        $lines[]    = sprintf($itemFormat, 'No', 'Nama Produk', 'Qty', 'Satuan', 'Harga', 'Disc', 'Subtotal');
-        $lines[]    = str_repeat('-', $width);
+        // Column widths sum to 70 (3+25+5+7+9+5+10 + 6 separating spaces).
+        // Nama Produk keeps effectively the same room it had at 80 columns
+        // (25 vs. the old 24) — Qty/Harga/Disc/Subtotal are trimmed instead,
+        // since those rarely need more than a handful of digits.
+        $itemFormat = '%-3s %-25s %5s %-7s %9s %5s %10s';
+        $lines[] = sprintf($itemFormat, 'No', 'Nama Produk', 'Qty', 'Satuan', 'Harga', 'Disc', 'Subtotal');
+        $lines[] = str_repeat('-', $width);
 
         foreach ($sale->details as $i => $detail) {
             $productName = $detail->product->product_name ?? '-';
-            $unit        = $detail->unit ?: $detail->product->sale_unit;
+            $unit = $detail->unit ?: $detail->product->sale_unit;
 
             $lines[] = sprintf(
                 $itemFormat,
                 (string) ($i + 1),
-                substr($productName, 0, 24),
+                substr($productName, 0, 25),
                 (string) $detail->quantity,
-                substr((string) $unit, 0, 8),
+                substr((string) $unit, 0, 7),
                 number_format((float) $detail->price, 0, ',', '.'),
-                $detail->discount . '%',
+                $detail->discount.'%',
                 number_format((float) $detail->subtotal, 0, ',', '.')
             );
         }
 
         $lines[] = str_repeat('-', $width);
 
-        $totalFormat = '%-63s%17s';
-        $lines[]     = sprintf($totalFormat, 'TOTAL KESELURUHAN', 'Rp ' . number_format((float) $sale->total_amount, 0, ',', '.'));
+        $totalFormat = '%-55s%15s';
+        $lines[] = sprintf($totalFormat, 'TOTAL KESELURUHAN', 'Rp '.number_format((float) $sale->total_amount, 0, ',', '.'));
 
         if ($sale->payment_status === 'Belum Bayar' && $sale->receivable) {
-            $lines[] = sprintf($totalFormat, 'SUDAH DIBAYAR', 'Rp ' . number_format((float) $sale->receivable->paid_amount, 0, ',', '.'));
-            $lines[] = sprintf($totalFormat, 'SISA TAGIHAN', 'Rp ' . number_format((float) $sale->receivable->remaining_amount, 0, ',', '.'));
+            $lines[] = sprintf($totalFormat, 'SUDAH DIBAYAR', 'Rp '.number_format((float) $sale->receivable->paid_amount, 0, ',', '.'));
+            $lines[] = sprintf($totalFormat, 'SISA TAGIHAN', 'Rp '.number_format((float) $sale->receivable->remaining_amount, 0, ',', '.'));
         }
 
-        $lines[] = '';
-
-        $statusLine = 'Status     : ' . $sale->payment_status;
+        $statusLine = 'Status     : '.$sale->payment_status;
         if ($sale->payment_status === 'Belum Bayar' && $sale->receivable?->due_date) {
-            $statusLine .= '          Jatuh Tempo: ' . \Carbon\Carbon::parse($sale->receivable->due_date)->format('d/m/Y');
+            $statusLine .= '          Jatuh Tempo: '.Carbon::parse($sale->receivable->due_date)->format('d/m/Y');
         }
         $lines[] = $statusLine;
 
         if ($sale->notes) {
-            $lines[] = '';
-            $lines[] = 'Catatan: ' . $sale->notes;
+            $lines[] = 'Catatan: '.$sale->notes;
         }
 
-        $lines[] = '';
+        // One blank line separating the totals/status block from the
+        // signature block, and one more before the dotted signature line
+        // itself — enough room to physically sign on continuous-form paper
+        // without wasting a full blank half-page per nota.
         $lines[] = '';
         $lines[] = sprintf('%-40s%s', str_pad('Penerima', 20, ' ', STR_PAD_BOTH), str_pad('Hormat Kami', 20, ' ', STR_PAD_BOTH));
-        $lines[] = '';
         $lines[] = '';
         $lines[] = sprintf(
             '%-40s%s',
@@ -269,14 +277,14 @@ class SaleController extends Controller
             str_pad('Toko Sentosa', 30, ' ', STR_PAD_BOTH)
         );
 
-        return implode("\n", $lines) . "\n";
+        return implode("\n", $lines)."\n";
     }
 
     public function edit(string $id)
     {
-        $sale      = Sale::with('details.product', 'receivable')->findOrFail($id);
+        $sale = Sale::with('details.product', 'receivable')->findOrFail($id);
         $customers = Customer::all();
-        $products  = Product::all();
+        $products = Product::all();
 
         return view('sales.edit', compact('sale', 'customers', 'products'));
     }
@@ -286,19 +294,19 @@ class SaleController extends Controller
         $sale = Sale::with('details', 'receivable')->findOrFail($id);
 
         $request->validate([
-            'sale_date'      => 'required|date',
+            'sale_date' => 'required|date',
             'payment_method' => 'required|in:Cash,Transfer,Utang',
             'payment_status' => 'required|in:Lunas,Belum Bayar',
-            'notes'          => 'nullable|string',
-            'product_id'     => 'required|array|min:1',
-            'product_id.*'   => 'required|exists:products,id',
-            'quantity'       => 'required|array',
-            'quantity.*'     => 'required|numeric|min:0.25',
-            'price'          => 'required|array',
-            'price.*'        => 'required|numeric|min:0',
-            'discount'       => 'required|array',
-            'discount.*'     => 'required|numeric|min:0|max:100',
-            'due_date'       => 'nullable|date',
+            'notes' => 'nullable|string',
+            'product_id' => 'required|array|min:1',
+            'product_id.*' => 'required|exists:products,id',
+            'quantity' => 'required|array',
+            'quantity.*' => 'required|numeric|min:0.25',
+            'price' => 'required|array',
+            'price.*' => 'required|numeric|min:0',
+            'discount' => 'required|array',
+            'discount.*' => 'required|numeric|min:0|max:100',
+            'due_date' => 'nullable|date',
         ]);
 
         try {
@@ -316,9 +324,9 @@ class SaleController extends Controller
 
                 $productIds = $request->product_id;
                 $quantities = $request->quantity;
-                $prices     = $request->price;
-                $discounts  = $request->discount;
-                $units      = $request->unit;
+                $prices = $request->price;
+                $discounts = $request->discount;
+                $units = $request->unit;
 
                 // Cek stok baru (dikonversi ke sale_unit)
                 foreach ($productIds as $i => $productId) {
@@ -332,20 +340,20 @@ class SaleController extends Controller
                 $totalAmount = 0;
 
                 foreach ($productIds as $i => $productId) {
-                    $qty      = $quantities[$i];
-                    $price    = $prices[$i];
+                    $qty = $quantities[$i];
+                    $price = $prices[$i];
                     $discount = $discounts[$i] ?? 0;
                     $subtotal = $qty * $price * (1 - $discount / 100);
                     $totalAmount += $subtotal;
 
-                    $detail = new SaleDetail();
-                    $detail->sale_id    = $sale->sale_id;
+                    $detail = new SaleDetail;
+                    $detail->sale_id = $sale->sale_id;
                     $detail->product_id = $productId;
-                    $detail->quantity   = $qty;
-                    $detail->unit       = $units[$i] ?? '';
-                    $detail->price      = $price;
-                    $detail->discount   = $discount;
-                    $detail->subtotal   = $subtotal;
+                    $detail->quantity = $qty;
+                    $detail->unit = $units[$i] ?? '';
+                    $detail->price = $price;
+                    $detail->discount = $discount;
+                    $detail->subtotal = $subtotal;
                     $detail->save();
 
                     $product = Product::findOrFail($productId);
@@ -355,23 +363,23 @@ class SaleController extends Controller
                 }
 
                 // Update header
-                $sale->customer_id    = $request->customer_id ?: null;
-                $sale->sale_date      = $request->sale_date;
+                $sale->customer_id = $request->customer_id ?: null;
+                $sale->sale_date = $request->sale_date;
                 $sale->payment_method = $request->payment_method;
                 $sale->payment_status = $request->payment_status;
-                $sale->paid_date      = $request->payment_status === 'Lunas' ? now()->toDateString() : null;
-                $sale->total_amount   = $totalAmount;
-                $sale->notes          = $request->notes;
+                $sale->paid_date = $request->payment_status === 'Lunas' ? now()->toDateString() : null;
+                $sale->total_amount = $totalAmount;
+                $sale->notes = $request->notes;
                 $sale->save();
 
                 // Update receivable
                 if ($request->payment_status === 'Belum Bayar') {
-                    $receivable = $sale->receivable ?? new Receivable();
-                    $receivable->sale_id     = $sale->sale_id;
+                    $receivable = $sale->receivable ?? new Receivable;
+                    $receivable->sale_id = $sale->sale_id;
                     $receivable->customer_id = $sale->customer_id;
-                    $receivable->due_date    = $request->due_date;
-                    $receivable->amount      = $totalAmount;
-                    $receivable->status      = 'Unpaid';
+                    $receivable->due_date = $request->due_date;
+                    $receivable->amount = $totalAmount;
+                    $receivable->status = 'Unpaid';
                     $receivable->save();
                 } else {
                     if ($sale->receivable) {
@@ -448,6 +456,6 @@ class SaleController extends Controller
 
         return redirect()
             ->route('dashboard')
-            ->with('success', 'Pesanan INV-' . str_pad($sale->sale_id, 3, '0', STR_PAD_LEFT) . ' ditandai sudah diproses.');
+            ->with('success', 'Pesanan INV-'.str_pad($sale->sale_id, 3, '0', STR_PAD_LEFT).' ditandai sudah diproses.');
     }
 }

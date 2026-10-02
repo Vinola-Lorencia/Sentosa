@@ -7,9 +7,8 @@ use App\Models\Purchase;
 use App\Models\Receivable;
 use App\Models\Sale;
 use App\Models\User;
-
-use Illuminate\Http\Request;
 use Carbon\Carbon;
+use Illuminate\Http\Request;
 
 class DashboardController extends Controller
 {
@@ -31,17 +30,25 @@ class DashboardController extends Controller
 
         $stokMenipis = Product::where('stock', '<', 10)->count();
 
-        // Grafik 6 bulan
+        // Grafik 6 bulan — satu query menggantikan 6 query whereMonth/whereYear
+        // terpisah, supaya jumlah round-trip ke DB tidak ikut membengkak
+        // (tiap round-trip ke Supabase yang di-host remote punya latensi
+        // jaringan tersendiri). Pengelompokan per bulan dilakukan di PHP
+        // (bukan lewat fungsi SQL seperti TO_CHAR) supaya query ini tetap
+        // portable lintas driver DB (Postgres di produksi, SQLite di test).
+        $enamBulanLalu = Carbon::now()->subMonths(5)->startOfMonth();
+        $penjualanPerBulan = Sale::where('sale_date', '>=', $enamBulanLalu)
+            ->get(['sale_date', 'total_amount'])
+            ->groupBy(fn ($sale) => Carbon::parse($sale->sale_date)->format('Y-m'))
+            ->map(fn ($group) => $group->sum('total_amount'));
+
         $grafikPenjualan = [];
         for ($i = 5; $i >= 0; $i--) {
             $bulan = Carbon::now()->subMonths($i);
-            $total = Sale::whereMonth('sale_date', $bulan->month)
-                ->whereYear('sale_date', $bulan->year)
-                ->sum('total_amount');
 
             $grafikPenjualan[] = [
                 'bulan' => $bulan->format('M Y'),
-                'total' => $total,
+                'total' => (float) ($penjualanPerBulan[$bulan->format('Y-m')] ?? 0),
             ];
         }
 
@@ -76,29 +83,58 @@ class DashboardController extends Controller
         // (created_by) — tidak diubah, supaya tampilan lama tidak berubah
         // arti. Aktivitas ganti foto (termasuk ke produk lama yang bukan
         // mereka buat) dihitung terpisah di foto_bulan_ini/foto_terakhir.
-        $inputProdukKaryawan = User::whereHas('role', function ($q) {
-                $q->where('role_name', 'Karyawan');
-            })
+        //
+        // Sebelumnya ini melakukan 4 query TERPISAH per karyawan (N+1) —
+        // dengan setiap query berarti satu round-trip jaringan ke Supabase,
+        // ini salah satu penyebab dashboard timeout. Digantikan dengan 4
+        // query ter-agregasi total (bukan per-karyawan), lalu dipetakan
+        // kembali per user di PHP.
+        $karyawanUsers = User::whereHas('role', function ($q) {
+            $q->where('role_name', 'Karyawan');
+        })->get();
+
+        $karyawanIds = $karyawanUsers->pluck('id');
+
+        $jumlahBulanIniPerKaryawan = Product::whereIn('created_by', $karyawanIds)
+            ->whereMonth('created_at', $now->month)
+            ->whereYear('created_at', $now->year)
+            ->groupBy('created_by')
+            ->selectRaw('created_by, count(*) as jumlah')
+            ->pluck('jumlah', 'created_by');
+
+        $fotoBulanIniPerKaryawan = Product::whereIn('updated_by', $karyawanIds)
+            ->whereMonth('updated_at', $now->month)
+            ->whereYear('updated_at', $now->year)
+            ->groupBy('updated_by')
+            ->selectRaw('updated_by, count(*) as jumlah')
+            ->pluck('jumlah', 'updated_by');
+
+        $produkTerakhirPerKaryawan = Product::whereIn('created_by', $karyawanIds)
+            ->latest('created_at')
             ->get()
-            ->map(function ($karyawan) use ($now) {
-                return [
-                    'user'            => $karyawan,
-                    'jumlah_bulan_ini' => Product::where('created_by', $karyawan->id)
-                        ->whereMonth('created_at', $now->month)
-                        ->whereYear('created_at', $now->year)
-                        ->count(),
-                    'produk_terakhir' => Product::where('created_by', $karyawan->id)
-                        ->latest('created_at')
-                        ->first(),
-                    'foto_bulan_ini'  => Product::where('updated_by', $karyawan->id)
-                        ->whereMonth('updated_at', $now->month)
-                        ->whereYear('updated_at', $now->year)
-                        ->count(),
-                    'foto_terakhir'   => Product::where('updated_by', $karyawan->id)
-                        ->latest('updated_at')
-                        ->first(),
-                ];
-            });
+            ->groupBy('created_by')
+            ->map(fn ($produk) => $produk->first());
+
+        $fotoTerakhirPerKaryawan = Product::whereIn('updated_by', $karyawanIds)
+            ->latest('updated_at')
+            ->get()
+            ->groupBy('updated_by')
+            ->map(fn ($produk) => $produk->first());
+
+        $inputProdukKaryawan = $karyawanUsers->map(function ($karyawan) use (
+            $jumlahBulanIniPerKaryawan,
+            $fotoBulanIniPerKaryawan,
+            $produkTerakhirPerKaryawan,
+            $fotoTerakhirPerKaryawan
+        ) {
+            return [
+                'user' => $karyawan,
+                'jumlah_bulan_ini' => (int) ($jumlahBulanIniPerKaryawan[$karyawan->id] ?? 0),
+                'produk_terakhir' => $produkTerakhirPerKaryawan[$karyawan->id] ?? null,
+                'foto_bulan_ini' => (int) ($fotoBulanIniPerKaryawan[$karyawan->id] ?? 0),
+                'foto_terakhir' => $fotoTerakhirPerKaryawan[$karyawan->id] ?? null,
+            ];
+        });
 
         // ✅ Produk terbaru — filter: today / week / month
         $produkFilter = $request->get('produk_filter', 'all');

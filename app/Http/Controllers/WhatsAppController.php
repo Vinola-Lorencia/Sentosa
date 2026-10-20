@@ -13,6 +13,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
@@ -26,6 +27,33 @@ class WhatsAppController extends Controller
 
     private const MAX_IMAGES = 3;
 
+    private const VOICE_NOTE_PREFIX = '[Voice Note] ';
+
+    private const VOICE_NOTE_FAILED_REPLY = 'Maaf, kami tidak dapat memproses pesan suara Anda. Silakan kirim pesan teks.';
+
+    private const UNSUPPORTED_MESSAGE_REPLY = 'Maaf, saya hanya bisa membaca pesan teks atau voice note. Silakan ketik produk yang ingin dipesan ya 🙏';
+
+    /**
+     * Media extensions treated as a voice note (WhatsApp voice notes are ogg/opus).
+     *
+     * @var list<string>
+     */
+    private const AUDIO_EXTENSIONS = ['ogg', 'oga', 'opus', 'mp3', 'mpeg', 'mpga', 'm4a', 'wav', 'webm', 'flac', 'aac', 'amr'];
+
+    /**
+     * Extensions Whisper decodes by file name; anything else is saved as .ogg.
+     *
+     * @var list<string>
+     */
+    private const WHISPER_FILE_EXTENSIONS = ['ogg', 'oga', 'mp3', 'mpeg', 'mpga', 'm4a', 'wav', 'webm', 'flac'];
+
+    /**
+     * Fonnte payload fields that may carry the media URL of a non-text message.
+     *
+     * @var list<string>
+     */
+    private const FONNTE_MEDIA_FIELDS = ['url', 'file', 'media', 'attachment'];
+
     // ─── Entry point ──────────────────────────────────────────────────────────
 
     public function handle(Request $request): Response
@@ -33,6 +61,25 @@ class WhatsAppController extends Controller
         [$from, $body] = $this->parseIncoming($request);
 
         if ($from === null) {
+            return response('', 200);
+        }
+
+        // Every parser marks a transcribed voice note with VOICE_NOTE_PREFIX.
+        // It's stripped here so step-based matching (isConfirmation,
+        // parsePaymentMethod, isPickup, name/address capture) sees exactly
+        // what the customer said, and only re-added in the GPT history.
+        $isVoiceNote = str_starts_with($body, self::VOICE_NOTE_PREFIX);
+        if ($isVoiceNote) {
+            $body = $this->normalizeVoiceTranscript(substr($body, strlen(self::VOICE_NOTE_PREFIX)));
+        }
+
+        // Photo/sticker/document without caption: nothing to read, so reply
+        // with a fixed hint instead of sending an empty prompt to GPT — and
+        // before the session is touched, so step/cart/name/address/
+        // pending_clarification all stay exactly as they were.
+        if (trim($body) === '') {
+            $this->sendMessage($from, self::UNSUPPORTED_MESSAGE_REPLY);
+
             return response('', 200);
         }
 
@@ -193,7 +240,7 @@ class WhatsAppController extends Controller
                     }
 
                     $history = $session->messages ?? [];
-                    $history[] = ['role' => 'user',     'content' => $body];
+                    $history[] = ['role' => 'user',     'content' => $isVoiceNote ? self::VOICE_NOTE_PREFIX.$body : $body];
                     $history[] = ['role' => 'assistant', 'content' => $reply];
 
                     $session->cart = $cart;
@@ -514,7 +561,6 @@ Panduan mode:
                 'role' => 'system',
                 'content' => "Kamu adalah asisten penjualan Toko Sentosa, toko grosir peralatan rumah tangga.
 
-⚠️ PENTING: Gunakan HANYA daftar produk yang diberikan di bawah ini. Jangan gunakan informasi produk (harga, stok, satuan) dari percakapan sebelumnya karena data stok bisa berubah sewaktu-waktu. Data di bawah ini adalah data TERBARU dari database.
 
 === DATA PRODUK TERBARU (dari database, diperbarui sekarang) ===
 {$productList}
@@ -1168,7 +1214,128 @@ Balas dalam format JSON:
         $isRealButton = $text !== '' && strtolower($text) !== self::FONNTE_NON_BUTTON_TEXT;
         $body = $isRealButton ? $text : $request->input('message', '');
 
-        return [$from, (string) $body];
+        if (trim((string) $body) !== '') {
+            return [$from, (string) $body];
+        }
+
+        // Non-text message (voice note, photo, sticker…). The exact media
+        // field names aren't confirmed yet, so the raw payload is logged to
+        // pin them down.
+        Log::info('Fonnte media payload', ['payload' => $request->except(['token'])]);
+
+        $audioUrl = $this->findFonnteAudioUrl($request);
+        if ($audioUrl === null) {
+            return [$from, ''];
+        }
+
+        $transcribed = $this->transcribeFonnteVoiceNote($audioUrl, $this->fonnteMediaExtension($request, $audioUrl));
+        if ($transcribed === null) {
+            $this->sendMessage($from, self::VOICE_NOTE_FAILED_REPLY);
+
+            return [null, ''];
+        }
+
+        Log::info('[Voice Note Fonnte] Transcribed', ['from' => $from, 'text' => $transcribed]);
+
+        return [$from, self::VOICE_NOTE_PREFIX.$transcribed];
+    }
+
+    /**
+     * First http(s) URL in one of the Fonnte media fields, provided it isn't
+     * clearly a non-audio file (photo, sticker, document). A URL with no
+     * recognizable extension is still tried as audio.
+     */
+    private function findFonnteAudioUrl(Request $request): ?string
+    {
+        foreach (self::FONNTE_MEDIA_FIELDS as $field) {
+            $value = $request->input($field);
+            if (! is_string($value) || ! str_contains($value, 'http')) {
+                continue;
+            }
+
+            $extension = $this->fonnteMediaExtension($request, $value);
+
+            return ($extension === null || in_array($extension, self::AUDIO_EXTENSIONS, true)) ? $value : null;
+        }
+
+        return null;
+    }
+
+    /**
+     * Lower-case media extension, from Fonnte's "extension" field or else the URL path.
+     */
+    private function fonnteMediaExtension(Request $request, string $url): ?string
+    {
+        $extension = strtolower(ltrim(trim((string) $request->input('extension', '')), '.'));
+        if ($extension === '') {
+            $extension = strtolower(pathinfo((string) parse_url($url, PHP_URL_PATH), PATHINFO_EXTENSION));
+        }
+
+        return $extension === '' ? null : $extension;
+    }
+
+    /**
+     * Download a Fonnte voice note (public URL — no auth, unlike Twilio's
+     * media) and transcribe it with Whisper. Returns null on any failure.
+     */
+    private function transcribeFonnteVoiceNote(string $url, ?string $extension = null): ?string
+    {
+        $fileExtension = in_array($extension, self::WHISPER_FILE_EXTENSIONS, true) ? $extension : 'ogg';
+        $tempPath = storage_path('app/temp/voice_fonnte_'.uniqid().'.'.$fileExtension);
+        $handle = null;
+
+        try {
+            // Not Storage::makeDirectory(): the local disk root is
+            // storage/app/private, but the file is written to storage/app/temp.
+            File::ensureDirectoryExists(dirname($tempPath));
+
+            $response = Http::timeout(30)->get($url);
+
+            if (! $response->successful()) {
+                Log::error('Fonnte voice note download failed', ['url' => $url, 'status' => $response->status()]);
+
+                return null;
+            }
+
+            file_put_contents($tempPath, $response->body());
+            $handle = fopen($tempPath, 'r');
+
+            $result = OpenAI::audio()->transcribe([
+                'model' => 'whisper-1',
+                'file' => $handle,
+                'language' => 'id',
+            ]);
+
+            $text = trim((string) $result->text);
+            if ($text === '') {
+                Log::error('Fonnte Whisper transcription empty', ['url' => $url]);
+
+                return null;
+            }
+
+            return $text;
+        } catch (\Throwable $e) {
+            Log::error('Fonnte Whisper transcription failed', ['url' => $url, 'error' => $e->getMessage()]);
+
+            return null;
+        } finally {
+            if (is_resource($handle)) {
+                fclose($handle);
+            }
+            if (file_exists($tempPath)) {
+                @unlink($tempPath);
+            }
+        }
+    }
+
+    /**
+     * Whisper ends short utterances with punctuation ("Ya.", "Transfer!"),
+     * which would break exact matches like isConfirmation(). Trailing
+     * question marks are kept since isLikelyNonInput() relies on them.
+     */
+    private function normalizeVoiceTranscript(string $text): string
+    {
+        return rtrim(trim($text), " \t\n\r\0\x0B.,!");
     }
 
     private function parseTwilioIncoming(Request $request): array

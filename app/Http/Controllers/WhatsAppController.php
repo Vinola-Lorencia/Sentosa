@@ -1194,6 +1194,10 @@ Balas dalam format JSON:
     // sentinel, never the customer's actual message.
     private const FONNTE_NON_BUTTON_TEXT = 'non-button message';
 
+    // For a voice note, photo, sticker etc. Fonnte doesn't leave "message"
+    // empty — it sends this literal sentinel instead (seen in production logs).
+    private const FONNTE_NON_TEXT_MESSAGE = 'non-text message';
+
     private function parseFonnteIncoming(Request $request): array
     {
         $sender = $request->input('sender');
@@ -1212,7 +1216,12 @@ Balas dalam format JSON:
         // must be ignored in that case and "message" used instead.
         $text = trim((string) $request->input('text', ''));
         $isRealButton = $text !== '' && strtolower($text) !== self::FONNTE_NON_BUTTON_TEXT;
-        $body = $isRealButton ? $text : $request->input('message', '');
+        $body = $isRealButton ? $text : trim((string) $request->input('message', ''));
+
+        // Voice note/photo/sticker: "message" is the placeholder, not content.
+        if (strtolower($body) === self::FONNTE_NON_TEXT_MESSAGE) {
+            $body = '';
+        }
 
         if (trim((string) $body) !== '') {
             return [$from, (string) $body];

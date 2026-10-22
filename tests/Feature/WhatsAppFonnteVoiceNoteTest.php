@@ -226,6 +226,59 @@ class WhatsAppFonnteVoiceNoteTest extends TestCase
         $this->assertSame(0, WhatsAppSession::count());
     }
 
+    public function test_non_text_message_placeholder_with_audio_url_is_transcribed(): void
+    {
+        // Production payload: Fonnte sends the literal "non-text message"
+        // in "message" for a voice note instead of leaving it empty.
+        $this->fakeHttp();
+        OpenAI::fake([
+            $this->fakeTranscription('Ada ember?'),
+            $this->fakeChatIntent('chat'),
+            $this->fakeChatReply('Ada, ember tersedia.'),
+        ]);
+
+        $this->postFonnte(['message' => 'non-text message', 'url' => self::AUDIO_URL, 'extension' => 'ogg']);
+
+        Http::assertSent(fn (HttpRequest $request) => $request->url() === self::AUDIO_URL);
+        OpenAI::assertSent(Audio::class);
+
+        $session = WhatsAppSession::where('phone_number', self::PHONE)->firstOrFail();
+        $lastUserMessage = collect($session->messages)->last(fn ($m) => $m['role'] === 'user');
+        $this->assertSame('[Voice Note] Ada ember?', $lastUserMessage['content']);
+        $this->assertFonnteReplySent('Ada, ember tersedia.');
+    }
+
+    public function test_non_text_message_placeholder_with_photo_url_gets_fixed_reply_without_gpt(): void
+    {
+        $this->fakeHttp();
+        OpenAI::fake([]);
+
+        // Case-insensitive and trimmed, like FONNTE_NON_BUTTON_TEXT.
+        $this->postFonnte(['message' => '  Non-Text Message ', 'url' => 'https://files.fonnte.test/media/photo.jpg', 'extension' => 'jpg']);
+
+        $this->assertFonnteReplySent('Maaf, saya hanya bisa membaca pesan teks atau voice note. Silakan ketik produk yang ingin dipesan ya 🙏');
+        Http::assertNotSent(fn (HttpRequest $request) => str_contains($request->url(), 'photo.jpg'));
+        OpenAI::assertNothingSent();
+        $this->assertSame(0, WhatsAppSession::count());
+    }
+
+    public function test_non_text_message_placeholder_without_url_gets_fixed_reply(): void
+    {
+        $this->fakeHttp();
+        OpenAI::fake([]);
+        Log::spy();
+
+        $this->postFonnte(['message' => 'non-text message']);
+
+        $this->assertFonnteReplySent('Maaf, saya hanya bisa membaca pesan teks atau voice note. Silakan ketik produk yang ingin dipesan ya 🙏');
+        OpenAI::assertNothingSent();
+        $this->assertSame(0, WhatsAppSession::count());
+        Log::shouldHaveReceived('info')->with('Fonnte media payload', Mockery::on(
+            fn (array $context) => ($context['payload']['message'] ?? null) === 'non-text message'
+                && ! array_key_exists('token', $context['payload'])
+        ));
+    }
+
     public function test_voice_ya_confirms_order_at_confirm_order_step(): void
     {
         $this->fakeHttp();

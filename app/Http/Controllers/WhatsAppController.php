@@ -227,7 +227,7 @@ class WhatsAppController extends Controller
                     $matchedProducts = $this->searchByKeywords($keywords);
 
                     // Stage 3: GPT generates reply using only the relevant product subset
-                    [$reply, $productsToShow, $cartAdd] = $this->generateChatReply($body, $session, $matchedProducts);
+                    [$reply, $productsToShow, $cartAdd] = $this->generateChatReply($body, $session, $matchedProducts, $keywords);
 
                     $cart = $session->cart ?? [];
                     foreach ($cartAdd as $item) {
@@ -552,12 +552,14 @@ Panduan mode:
 
     // ─── Stage 3: GPT reply with only the relevant product subset ────────────
 
-    private function generateChatReply(string $body, WhatsAppSession $session, Collection $products): array
+    /**
+     * @param  list<string>  $keywords
+     */
+    private function generateChatReply(string $body, WhatsAppSession $session, Collection $products, array $keywords = []): array
     {
         $cart = $session->cart ?? [];
 
-        $productList = $products->map(fn ($p) => "{$p->product_name} - Rp".number_format($p->sale_price, 0, ',', '.')."/{$p->sale_unit} (stok: {$p->stock})"
-        )->join("\n");
+        $productList = $products->map(fn ($p) => $this->formatProductLine($p))->join("\n");
 
         $cartSummary = empty($cart)
             ? 'Keranjang kosong.'
@@ -610,10 +612,16 @@ Balas dalam format JSON:
         $cartAdd = $result['cart_add'] ?? [];
         $showNames = $result['show_products'] ?? [];
 
+        $productListFallback = $this->productListFallback((string) $reply, $products, $keywords);
+        if ($productListFallback !== null) {
+            $reply = rtrim((string) $reply)."\n\n".$productListFallback;
+        }
+
         Log::info('Chat reply generated', [
             'body' => $body,
             'reply' => mb_substr((string) $reply, 0, 1000),
             'products_in_prompt' => $products->count(),
+            'product_list_appended' => $productListFallback !== null,
         ]);
 
         $productsToShow = collect($showNames)
@@ -624,6 +632,51 @@ Balas dalam format JSON:
             ->filter(fn ($p) => $p && $p->image);
 
         return [$reply, $productsToShow, $cartAdd];
+    }
+
+    /**
+     * GPT sometimes replies with only an intro ("Berikut adalah daftar
+     * kobokan yang tersedia:") and no actual items. When the reply names
+     * none of the keyword-matched products, the list is built from the
+     * database instead. Skipped when $products is searchByKeywords()'s
+     * full-catalog fallback (no product matches a keyword), so an unrelated
+     * catalog is never appended to e.g. "maaf, ember tidak tersedia".
+     *
+     * @param  list<string>  $keywords
+     */
+    private function productListFallback(string $reply, Collection $products, array $keywords): ?string
+    {
+        $keywords = collect($keywords)
+            ->map(fn ($kw) => strtolower(trim((string) $kw)))
+            ->filter()
+            ->values();
+
+        if ($keywords->isEmpty() || $products->isEmpty()) {
+            return null;
+        }
+
+        $matchesKeyword = $products->contains(fn ($p) => $keywords
+            ->contains(fn ($kw) => str_contains(strtolower($p->product_name), $kw)));
+        if (! $matchesKeyword) {
+            return null;
+        }
+
+        $lowerReply = strtolower($reply);
+        if ($products->contains(fn ($p) => str_contains($lowerReply, strtolower($p->product_name)))) {
+            return null;
+        }
+
+        $lines = $products->take(10)->map(fn ($p) => '- '.$this->formatProductLine($p));
+        if ($products->count() > 10) {
+            $lines->push('Ketik nama produk untuk info lebih detail.');
+        }
+
+        return $lines->join("\n");
+    }
+
+    private function formatProductLine(Product $product): string
+    {
+        return "{$product->product_name} - Rp".number_format($product->sale_price, 0, ',', '.')."/{$product->sale_unit} (stok: {$product->stock})";
     }
 
     // ─── Product search with fuzzy word-split fallback ───────────────────────

@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\WhatsAppSession;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use OpenAI\Laravel\Facades\OpenAI;
 use OpenAI\Responses\Chat\CreateResponse;
 use Tests\TestCase;
@@ -31,7 +32,7 @@ class WhatsAppFonnteTest extends TestCase
         // here rather than via config() to make the test independent of
         // whatever the real .env happens to hold.
         putenv('WHATSAPP_PROVIDER=fonnte');
-        $_ENV['WHATSAPP_PROVIDER']    = 'fonnte';
+        $_ENV['WHATSAPP_PROVIDER'] = 'fonnte';
         $_SERVER['WHATSAPP_PROVIDER'] = 'fonnte';
 
         Http::fake([
@@ -77,10 +78,10 @@ class WhatsAppFonnteTest extends TestCase
         ]);
 
         $response = $this->postJson('/webhook/whatsapp', [
-            'device'  => '6281111111111',
-            'sender'  => '6281234567890',
+            'device' => '6281111111111',
+            'sender' => '6281234567890',
             'message' => 'halo',
-            'name'    => 'Budi',
+            'name' => 'Budi',
         ]);
 
         $response->assertStatus(200);
@@ -98,8 +99,8 @@ class WhatsAppFonnteTest extends TestCase
         ]);
 
         $this->postJson('/webhook/whatsapp', [
-            'device'  => '6281111111111',
-            'sender'  => '6281234567890',
+            'device' => '6281111111111',
+            'sender' => '6281234567890',
             'message' => 'halo',
         ]);
 
@@ -121,10 +122,10 @@ class WhatsAppFonnteTest extends TestCase
         ]);
 
         $this->postJson('/webhook/whatsapp', [
-            'device'  => '6281111111111',
-            'sender'  => '6281234567890',
+            'device' => '6281111111111',
+            'sender' => '6281234567890',
             'message' => 'BTN_ID_1',
-            'text'    => 'Transfer Bank',
+            'text' => 'Transfer Bank',
         ]);
 
         $session = WhatsAppSession::first();
@@ -148,10 +149,10 @@ class WhatsAppFonnteTest extends TestCase
         ]);
 
         $this->postJson('/webhook/whatsapp', [
-            'device'  => '6281111111111',
-            'sender'  => '6281234567890',
+            'device' => '6281111111111',
+            'sender' => '6281234567890',
             'message' => 'ada panci gak?',
-            'text'    => 'non-button message',
+            'text' => 'non-button message',
         ]);
 
         $session = WhatsAppSession::first();
@@ -162,10 +163,32 @@ class WhatsAppFonnteTest extends TestCase
         $this->assertEquals('ada panci gak?', $lastUserMessage['content']);
     }
 
+    public function test_chat_reply_is_logged_with_body_truncated_reply_and_product_count()
+    {
+        Log::spy();
+        $longReply = str_repeat('a', 1500);
+        OpenAI::fake([
+            $this->fakeChatIntent('chat'),
+            $this->fakeChatReply($longReply),
+        ]);
+
+        $this->postJson('/webhook/whatsapp', [
+            'device' => '6281111111111',
+            'sender' => '6281234567890',
+            'message' => 'ada panci gak?',
+        ]);
+
+        Log::shouldHaveReceived('info')->with('Chat reply generated', \Mockery::on(
+            fn (array $context) => $context['body'] === 'ada panci gak?'
+                && $context['reply'] === str_repeat('a', 1000)
+                && $context['products_in_prompt'] === 0
+        ));
+    }
+
     public function test_missing_sender_is_ignored_without_creating_a_session()
     {
         $response = $this->postJson('/webhook/whatsapp', [
-            'device'  => '6281111111111',
+            'device' => '6281111111111',
             'message' => 'halo',
         ]);
 

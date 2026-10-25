@@ -610,6 +610,12 @@ Balas dalam format JSON:
         $cartAdd = $result['cart_add'] ?? [];
         $showNames = $result['show_products'] ?? [];
 
+        Log::info('Chat reply generated', [
+            'body' => $body,
+            'reply' => mb_substr((string) $reply, 0, 1000),
+            'products_in_prompt' => $products->count(),
+        ]);
+
         $productsToShow = collect($showNames)
             ->take(self::MAX_IMAGES)
             ->map(fn ($name) => Product::where('stock', '>', 0)

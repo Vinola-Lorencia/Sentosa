@@ -362,6 +362,14 @@ class WhatsAppController extends Controller
         }
 
         $lower = strtolower($body);
+
+        // Explicit "what's my total" phrasing wins even alongside product words.
+        foreach (['berapa total', 'total berapa', 'berapa semuanya', 'semuanya berapa', 'totalnya'] as $kw) {
+            if (str_contains($lower, $kw)) {
+                return true;
+            }
+        }
+
         // "keranjang" excluded — it's also a common product name (keranjang sampah, keranjang plastik)
         // Only match explicit cart-view phrases or clear financial queries
         foreach (['total belanja', 'lihat keranjang', 'cek keranjang', 'isi keranjang',
@@ -370,16 +378,16 @@ class WhatsAppController extends Controller
                 return true;
             }
         }
-        // Single-word triggers only safe when message is short (no product list)
-        if (strlen(trim($body)) <= 30) {
-            foreach (['total', 'berapa', 'lihat'] as $kw) {
-                if (str_contains($lower, $kw)) {
-                    return true;
-                }
-            }
+
+        // "harga baskom 88 berapa?" / "ada ember?" is a product question, not
+        // a cart one. Whole words only, so "ada" doesn't match "padahal".
+        if (preg_match('/\b(harga|stok|ada|jual)\b/u', $lower)) {
+            return false;
         }
 
-        return false;
+        // Single-word trigger only safe when message is short (no product list).
+        // "berapa"/"lihat" are deliberately excluded: "kobokan 03 berapa" asks a price.
+        return strlen(trim($body)) <= 30 && str_contains($lower, 'total');
     }
 
     private function isLikelyNonInput(string $body): bool

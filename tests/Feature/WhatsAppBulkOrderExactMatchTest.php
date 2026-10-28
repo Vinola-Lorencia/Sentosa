@@ -8,6 +8,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use OpenAI\Laravel\Facades\OpenAI;
 use OpenAI\Responses\Chat\CreateResponse;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 /**
@@ -162,5 +163,131 @@ class WhatsAppBulkOrderExactMatchTest extends TestCase
 
         $this->assertNotNull($session->pending_clarification);
         $this->assertEmpty($session->cart);
+    }
+
+    /**
+     * @param  list<array{item: string, qty: float, unit: string}>  $items
+     */
+    private function fakeMultiBulkIntent(array $items): CreateResponse
+    {
+        return CreateResponse::fake(['choices' => [['message' => [
+            'content' => json_encode(['mode' => 'bulk', 'keywords' => [], 'bulk_items' => $items]),
+        ]]]]);
+    }
+
+    private function createKobokans(): Product
+    {
+        foreach (['KOBOKAN 03', 'KOBOKAN 013'] as $name) {
+            $product = Product::create([
+                'product_name' => $name,
+                'sale_price' => 15000,
+                'sale_unit' => 'Lusin',
+                'purchase_unit' => 'Dus',
+                'dus_to_unit' => 1,
+                'stock' => 240,
+                'default_buy_price' => 10000,
+                'default_buy_discount' => 0,
+            ]);
+        }
+
+        return $product; // KOBOKAN 013
+    }
+
+    private function sentReply(): string
+    {
+        $sent = collect(Http::recorded())->map(fn ($pair) => $pair[0])
+            ->filter(fn ($r) => $r->url() === 'https://api.fonnte.com/send');
+
+        return (string) $sent->last()['message'];
+    }
+
+    /**
+     * @return array<string, array{list<array{item: string, qty: float, unit: string}>}>
+     */
+    public static function genericAfterOrBeforeSpecific(): array
+    {
+        $specific = ['item' => 'KOBOKAN 013', 'qty' => 2, 'unit' => 'Lusin'];
+        $generic = ['item' => 'kobokan', 'qty' => 1, 'unit' => 'Lusin'];
+
+        return [
+            'generic after specific' => [[$specific, $generic]],
+            'generic before specific' => [[$generic, $specific]],
+        ];
+    }
+
+    /**
+     * @param  list<array{item: string, qty: float, unit: string}>  $items
+     */
+    #[DataProvider('genericAfterOrBeforeSpecific')]
+    public function test_generic_item_covered_by_specific_item_in_same_message_is_not_clarified(array $items): void
+    {
+        $kobokan013 = $this->createKobokans();
+        OpenAI::fake([$this->fakeMultiBulkIntent($items)]);
+
+        $this->postJson('/webhook/whatsapp?key=test-webhook-secret', [
+            'device' => '6281111111111',
+            'sender' => '6281234567892',
+            'message' => 'KOBOKAN 013 2 Lusin, kobokan 1 Lusin',
+        ])->assertStatus(200);
+
+        $session = WhatsAppSession::where('phone_number', 'whatsapp:+6281234567892')->firstOrFail();
+        $this->assertNull($session->pending_clarification);
+        $this->assertCount(1, $session->cart);
+        $this->assertSame($kobokan013->id, $session->cart[0]['product_id']);
+        $this->assertSame(2.0, (float) $session->cart[0]['qty']);
+
+        $reply = $this->sentReply();
+        $this->assertStringNotContainsString('Perlu klarifikasi', $reply);
+        $this->assertStringContainsString('*kobokan* dianggap sama dengan *KOBOKAN 013*', $reply);
+    }
+
+    public function test_generic_item_not_contained_in_added_product_still_asks_for_clarification(): void
+    {
+        $this->createKobokans();
+        foreach (['BASKOM 68', 'BASKOM JERMAN 86'] as $name) {
+            Product::create([
+                'product_name' => $name, 'sale_price' => 15000, 'sale_unit' => 'Lusin', 'purchase_unit' => 'Dus',
+                'dus_to_unit' => 1, 'stock' => 240, 'default_buy_price' => 10000, 'default_buy_discount' => 0,
+            ]);
+        }
+        OpenAI::fake([$this->fakeMultiBulkIntent([
+            ['item' => 'KOBOKAN 013', 'qty' => 2, 'unit' => 'Lusin'],
+            ['item' => 'baskom', 'qty' => 1, 'unit' => 'Lusin'],
+        ])]);
+
+        $this->postJson('/webhook/whatsapp?key=test-webhook-secret', [
+            'device' => '6281111111111',
+            'sender' => '6281234567893',
+            'message' => 'KOBOKAN 013 2 Lusin, baskom 1 Lusin',
+        ])->assertStatus(200);
+
+        $session = WhatsAppSession::where('phone_number', 'whatsapp:+6281234567893')->firstOrFail();
+        $this->assertCount(1, $session->pending_clarification);
+        $this->assertSame('baskom', $session->pending_clarification[0]['original']);
+        $this->assertStringContainsString('Perlu klarifikasi', $this->sentReply());
+    }
+
+    public function test_generic_item_alone_is_still_clarified_when_specific_was_from_an_earlier_message(): void
+    {
+        $kobokan013 = $this->createKobokans();
+        WhatsAppSession::create([
+            'phone_number' => 'whatsapp:+6281234567894',
+            'step' => 'chat',
+            'cart' => [[
+                'product_id' => $kobokan013->id, 'product_name' => 'KOBOKAN 013', 'qty' => 2,
+                'unit' => 'Lusin', 'price' => 15000, 'subtotal' => 30000,
+            ]],
+            'messages' => [],
+        ]);
+        OpenAI::fake([$this->fakeBulkIntent('kobokan', 1, 'Lusin')]);
+
+        $this->postJson('/webhook/whatsapp?key=test-webhook-secret', [
+            'device' => '6281111111111',
+            'sender' => '6281234567894',
+            'message' => 'kobokan 1 Lusin',
+        ])->assertStatus(200);
+
+        $session = WhatsAppSession::where('phone_number', 'whatsapp:+6281234567894')->firstOrFail();
+        $this->assertNotNull($session->pending_clarification);
     }
 }

@@ -918,6 +918,9 @@ Balas dalam format JSON:
         $clarify = [];
         $notFound = [];
         $stockIssues = [];
+        $coveredNotes = [];
+        $addedNames = [];
+        $ambiguous = [];
 
         $pending = [];
 
@@ -955,23 +958,43 @@ Balas dalam format JSON:
                 }
                 $matched[] = "✅ {$product->product_name} × {$displayQty} {$displayUnit} — Rp"
                            .number_format($subtotal, 0, ',', '.');
+                $addedNames[] = $product->product_name;
 
             } elseif ($found->count() > 1) {
-                $options = $found->take(3)
-                    ->map(fn ($p) => ['id' => $p->id, 'name' => $p->product_name])
-                    ->values()->all();
-                $optText = collect($options)->map(fn ($o) => "  • {$o['name']}")->join("\n");
-                $clarify[] = "❓ *{$name}* ada beberapa pilihan:\n{$optText}\nBalas dengan pilihan Anda (contoh: \"yang kecil\", \"yang besar\", atau \"1\"/\"2\")";
-
-                $pending[] = [
-                    'original' => $name,
-                    'options' => $options,
-                    'qty' => $qty,
-                    'unit' => $unit,
-                ];
+                // Decided after the loop, so a specific item later in the
+                // same message (e.g. "..., KOBOKAN 013 2 lusin") counts too.
+                $ambiguous[] = ['name' => $name, 'qty' => $qty, 'unit' => $unit, 'found' => $found];
             } else {
                 $notFound[] = "❌ {$name} — tidak ditemukan";
             }
+        }
+
+        foreach ($ambiguous as $amb) {
+            // A generic item ("kobokan") whose word already appears in a
+            // specific product added from this same message ("KOBOKAN 013")
+            // is treated as that product — no clarification prompt.
+            $generic = mb_strtolower(trim($amb['name']));
+            $coveredBy = $generic === '' ? null : collect($addedNames)->first(
+                fn ($addedName) => preg_match('/\b'.preg_quote($generic, '/').'\b/u', mb_strtolower($addedName)) === 1
+            );
+            if ($coveredBy !== null) {
+                $coveredNotes[] = "ℹ️ *{$amb['name']}* dianggap sama dengan *{$coveredBy}* yang sudah ditambahkan. Ketik nama lengkapnya jika maksud Anda produk lain.";
+
+                continue;
+            }
+
+            $options = $amb['found']->take(3)
+                ->map(fn ($p) => ['id' => $p->id, 'name' => $p->product_name])
+                ->values()->all();
+            $optText = collect($options)->map(fn ($o) => "  • {$o['name']}")->join("\n");
+            $clarify[] = "❓ *{$amb['name']}* ada beberapa pilihan:\n{$optText}\nBalas dengan pilihan Anda (contoh: \"yang kecil\", \"yang besar\", atau \"1\"/\"2\")";
+
+            $pending[] = [
+                'original' => $amb['name'],
+                'options' => $options,
+                'qty' => $amb['qty'],
+                'unit' => $amb['unit'],
+            ];
         }
 
         $session->cart = $cart;
@@ -982,6 +1005,9 @@ Balas dalam format JSON:
 
         if (! empty($matched)) {
             $lines[] = "\n\n*Baru ditambahkan:*\n".implode("\n", $matched);
+        }
+        if (! empty($coveredNotes)) {
+            $lines[] = "\n".implode("\n", $coveredNotes);
         }
         if (! empty($clarify)) {
             $lines[] = "\n\n*Perlu klarifikasi:*\n".implode("\n\n", $clarify);

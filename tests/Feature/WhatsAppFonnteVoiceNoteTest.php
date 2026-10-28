@@ -34,7 +34,7 @@ class WhatsAppFonnteVoiceNoteTest extends TestCase
     {
         parent::setUp();
 
-        config(['services.fonnte.token' => 'test-fonnte-token']);
+        config(['services.fonnte.token' => 'test-fonnte-token', 'services.whatsapp.webhook_secret' => 'test-webhook-secret']);
 
         putenv('WHATSAPP_PROVIDER=fonnte');
         $_ENV['WHATSAPP_PROVIDER'] = 'fonnte';
@@ -62,7 +62,7 @@ class WhatsAppFonnteVoiceNoteTest extends TestCase
      */
     private function postFonnte(array $overrides = []): void
     {
-        $this->postJson('/webhook/whatsapp', array_merge([
+        $this->postJson('/webhook/whatsapp?key=test-webhook-secret', array_merge([
             'device' => '6281111111111',
             'sender' => '6281234567890',
             'message' => '',

@@ -24,7 +24,7 @@ class WhatsAppChatProductListFallbackTest extends TestCase
     {
         parent::setUp();
 
-        config(['services.fonnte.token' => 'test-fonnte-token']);
+        config(['services.fonnte.token' => 'test-fonnte-token', 'services.whatsapp.webhook_secret' => 'test-webhook-secret']);
 
         putenv('WHATSAPP_PROVIDER=fonnte');
         $_ENV['WHATSAPP_PROVIDER'] = 'fonnte';
@@ -74,7 +74,7 @@ class WhatsAppChatProductListFallbackTest extends TestCase
 
     private function sendMessage(string $message): string
     {
-        $this->postJson('/webhook/whatsapp', [
+        $this->postJson('/webhook/whatsapp?key=test-webhook-secret', [
             'device' => '6281111111111',
             'sender' => '6281234567890',
             'message' => $message,

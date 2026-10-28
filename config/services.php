@@ -36,23 +36,36 @@ return [
     ],
 
     'twilio' => [
-        'sid'   => env('TWILIO_SID'),
+        'sid' => env('TWILIO_SID'),
         'token' => env('TWILIO_TOKEN'),
     ],
 
     'meta' => [
         'phone_number_id' => env('META_PHONE_NUMBER_ID'),
-        'access_token'    => env('META_ACCESS_TOKEN'),
-        'verify_token'    => env('META_VERIFY_TOKEN'),
+        'access_token' => env('META_ACCESS_TOKEN'),
+        'verify_token' => env('META_VERIFY_TOKEN'),
     ],
 
     'fonnte' => [
         'token' => env('FONNTE_TOKEN'),
     ],
 
+    'whatsapp' => [
+        // Shared secret Fonnte must send as ?key=... on the webhook URL.
+        'webhook_secret' => env('WHATSAPP_WEBHOOK_SECRET', ''),
+    ],
+
+    'shop' => [
+        // Shown to WhatsApp customers who pick "Transfer Bank". Left empty in
+        // the repo on purpose — set the real values in .env only.
+        'bank_name' => env('SHOP_BANK_NAME', ''),
+        'bank_account' => env('SHOP_BANK_ACCOUNT', ''),
+        'bank_account_name' => env('SHOP_BANK_ACCOUNT_NAME', ''),
+    ],
+
     'supabase' => [
-        'url'            => env('SUPABASE_URL'),
-        'secret_key'     => env('SUPABASE_SECRET_KEY'),
+        'url' => env('SUPABASE_URL'),
+        'secret_key' => env('SUPABASE_SECRET_KEY'),
         'storage_bucket' => env('SUPABASE_STORAGE_BUCKET'),
     ],
 

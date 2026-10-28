@@ -25,7 +25,7 @@ class WhatsAppFonnteTest extends TestCase
     {
         parent::setUp();
 
-        config(['services.fonnte.token' => 'test-fonnte-token']);
+        config(['services.fonnte.token' => 'test-fonnte-token', 'services.whatsapp.webhook_secret' => 'test-webhook-secret']);
 
         // WHATSAPP_PROVIDER is read via env() directly in the controller
         // (matching the existing Twilio/Meta switch), so it must be forced
@@ -77,7 +77,7 @@ class WhatsAppFonnteTest extends TestCase
             $this->fakeChatReply('Halo! Ada yang bisa kami bantu?'),
         ]);
 
-        $response = $this->postJson('/webhook/whatsapp', [
+        $response = $this->postJson('/webhook/whatsapp?key=test-webhook-secret', [
             'device' => '6281111111111',
             'sender' => '6281234567890',
             'message' => 'halo',
@@ -98,7 +98,7 @@ class WhatsAppFonnteTest extends TestCase
             $this->fakeChatReply('Halo! Ada yang bisa kami bantu?'),
         ]);
 
-        $this->postJson('/webhook/whatsapp', [
+        $this->postJson('/webhook/whatsapp?key=test-webhook-secret', [
             'device' => '6281111111111',
             'sender' => '6281234567890',
             'message' => 'halo',
@@ -121,7 +121,7 @@ class WhatsAppFonnteTest extends TestCase
             $this->fakeChatReply('Baik, dicatat.'),
         ]);
 
-        $this->postJson('/webhook/whatsapp', [
+        $this->postJson('/webhook/whatsapp?key=test-webhook-secret', [
             'device' => '6281111111111',
             'sender' => '6281234567890',
             'message' => 'BTN_ID_1',
@@ -148,7 +148,7 @@ class WhatsAppFonnteTest extends TestCase
             $this->fakeChatReply('Halo! Ada yang bisa kami bantu?'),
         ]);
 
-        $this->postJson('/webhook/whatsapp', [
+        $this->postJson('/webhook/whatsapp?key=test-webhook-secret', [
             'device' => '6281111111111',
             'sender' => '6281234567890',
             'message' => 'ada panci gak?',
@@ -172,7 +172,7 @@ class WhatsAppFonnteTest extends TestCase
             $this->fakeChatReply($longReply),
         ]);
 
-        $this->postJson('/webhook/whatsapp', [
+        $this->postJson('/webhook/whatsapp?key=test-webhook-secret', [
             'device' => '6281111111111',
             'sender' => '6281234567890',
             'message' => 'ada panci gak?',
@@ -187,7 +187,7 @@ class WhatsAppFonnteTest extends TestCase
 
     public function test_missing_sender_is_ignored_without_creating_a_session()
     {
-        $response = $this->postJson('/webhook/whatsapp', [
+        $response = $this->postJson('/webhook/whatsapp?key=test-webhook-secret', [
             'device' => '6281111111111',
             'message' => 'halo',
         ]);

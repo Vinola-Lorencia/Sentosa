@@ -29,7 +29,7 @@ class WhatsAppStaleClarificationTest extends TestCase
     {
         parent::setUp();
 
-        config(['services.fonnte.token' => 'test-fonnte-token']);
+        config(['services.fonnte.token' => 'test-fonnte-token', 'services.whatsapp.webhook_secret' => 'test-webhook-secret']);
 
         putenv('WHATSAPP_PROVIDER=fonnte');
         $_ENV['WHATSAPP_PROVIDER'] = 'fonnte';
@@ -120,7 +120,7 @@ class WhatsAppStaleClarificationTest extends TestCase
             ]),
         ]);
 
-        $response = $this->postJson('/webhook/whatsapp', [
+        $response = $this->postJson('/webhook/whatsapp?key=test-webhook-secret', [
             'device' => '6281111111111',
             'sender' => '6287720981167',
             'message' => 'KOBOKAN 03 2 Lusin, BASKOM JERMAN 86 1 Lusin',
@@ -165,7 +165,7 @@ class WhatsAppStaleClarificationTest extends TestCase
             ]),
         ]);
 
-        $response = $this->postJson('/webhook/whatsapp', [
+        $response = $this->postJson('/webhook/whatsapp?key=test-webhook-secret', [
             'device' => '6281111111111',
             'sender' => '6281234500000',
             'message' => 'batal semua pesanan saya tolong dibatalkan secepatnya',
@@ -246,7 +246,7 @@ class WhatsAppStaleClarificationTest extends TestCase
         // and ends with a lone "2" that the old unbounded regex would have
         // read as "pilih opsi ke-2" (BASKOM BIRU) despite sharing no actual
         // keyword overlap with this message at all.
-        $response = $this->postJson('/webhook/whatsapp', [
+        $response = $this->postJson('/webhook/whatsapp?key=test-webhook-secret', [
             'device' => '6281111111111',
             'sender' => '6281234511111',
             'message' => 'tolong konfirmasi semua pesanan saya ya 2',

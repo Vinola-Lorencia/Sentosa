@@ -25,7 +25,7 @@ class WhatsAppBulkOrderExactMatchTest extends TestCase
     {
         parent::setUp();
 
-        config(['services.fonnte.token' => 'test-fonnte-token']);
+        config(['services.fonnte.token' => 'test-fonnte-token', 'services.whatsapp.webhook_secret' => 'test-webhook-secret']);
 
         putenv('WHATSAPP_PROVIDER=fonnte');
         $_ENV['WHATSAPP_PROVIDER'] = 'fonnte';
@@ -93,7 +93,7 @@ class WhatsAppBulkOrderExactMatchTest extends TestCase
             $this->fakeBulkIntent('KOBOKAN 03', 3, 'Lusin'),
         ]);
 
-        $response = $this->postJson('/webhook/whatsapp', [
+        $response = $this->postJson('/webhook/whatsapp?key=test-webhook-secret', [
             'device' => '6281111111111',
             'sender' => '6281234567890',
             'message' => 'KOBOKAN 03 3 Lusin',
@@ -150,7 +150,7 @@ class WhatsAppBulkOrderExactMatchTest extends TestCase
             $this->fakeBulkIntent('baskom', 2, 'Lusin'),
         ]);
 
-        $response = $this->postJson('/webhook/whatsapp', [
+        $response = $this->postJson('/webhook/whatsapp?key=test-webhook-secret', [
             'device' => '6281111111111',
             'sender' => '6281234567891',
             'message' => 'baskom 2 Lusin',

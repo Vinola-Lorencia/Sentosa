@@ -7,6 +7,7 @@ use App\Models\Product;
 use App\Models\Sale;
 use App\Models\SaleDetail;
 use App\Models\WhatsAppSession;
+use App\Services\SupabaseStorageService;
 use App\Services\UnitConverter;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Request;
@@ -58,6 +59,15 @@ class WhatsAppController extends Controller
 
     public function handle(Request $request): Response
     {
+        // The webhook is public (no session/CSRF), so every POST must carry
+        // the shared secret as ?key=... — fails closed when none is configured.
+        $secret = (string) config('services.whatsapp.webhook_secret');
+        if ($secret === '' || ! hash_equals($secret, (string) $request->query('key', ''))) {
+            Log::warning('WhatsApp webhook rejected: invalid or missing key', ['ip' => $request->ip()]);
+
+            return response('Forbidden', 403);
+        }
+
         [$from, $body] = $this->parseIncoming($request);
 
         if ($from === null) {
@@ -208,6 +218,12 @@ class WhatsAppController extends Controller
                     $session->save();
                     $reply = 'Pesanan dibatalkan. Ada yang bisa kami bantu lagi?';
 
+                } elseif (($mode === 'done' || $mode === 'confirm') && $this->collectingStepPrompt($session) !== null) {
+                    // Already confirmed and collecting name/address/payment — a
+                    // repeated "ya"/"selesai" must not send the flow back to
+                    // confirm_order; just repeat the pending question.
+                    $reply = $this->collectingStepPrompt($session);
+
                 } elseif ($mode === 'done' || $mode === 'confirm') {
                     // Both "selesai" and "ya/iya" without confirm_order step → show cart + ask
                     if (empty($session->cart)) {
@@ -235,7 +251,15 @@ class WhatsAppController extends Controller
                             ->whereRaw('LOWER(product_name) LIKE ?', ['%'.strtolower($item['product_name'] ?? '').'%'])
                             ->first();
                         if ($product) {
-                            $cart = $this->addToCart($cart, $product, (float) ($item['qty'] ?? 1), $item['unit'] ?? $product->sale_unit);
+                            $qty = (float) ($item['qty'] ?? 1);
+                            $unit = $item['unit'] ?? $product->sale_unit;
+                            $shortfall = $this->stockShortfallMessage($cart, $product, $qty, $unit, false);
+                            if ($shortfall !== null) {
+                                $reply .= "\n\n".$shortfall;
+
+                                continue;
+                            }
+                            $cart = $this->addToCart($cart, $product, $qty, $unit);
                         }
                     }
 
@@ -271,10 +295,15 @@ class WhatsAppController extends Controller
             $isLocalhost = str_contains($baseUrl, 'localhost') || str_contains($baseUrl, '127.0.0.1');
 
             foreach ($productsToShow as $product) {
-                $imageUrl = $baseUrl.'/storage_link/'.ltrim((string) $product->image, '/');
+                // Current uploads live in Supabase (image_path, always a public
+                // URL); only legacy rows fall back to the old local `image`.
+                $imageUrl = $product->image_path
+                    ? app(SupabaseStorageService::class)->getPublicUrl($product->image_path)
+                    : $baseUrl.'/storage_link/'.ltrim((string) $product->image, '/');
 
                 \Log::info('WhatsApp image debug', [
                     'product' => $product->product_name,
+                    'image_path' => $product->image_path,
                     'image_field' => $product->image,
                     'image_url' => $imageUrl,
                     'localhost' => $isLocalhost,
@@ -284,7 +313,7 @@ class WhatsAppController extends Controller
                          .'💰 Rp'.number_format($product->sale_price, 0, ',', '.')."/{$product->sale_unit}\n"
                          ."📦 Stok: {$product->stock} {$product->sale_unit}";
 
-                if ($isLocalhost) {
+                if ($isLocalhost && ! $product->image_path) {
                     // Twilio cannot fetch localhost URLs — send text-only with a note
                     $caption .= "\n🖼️ _(Gambar tersedia di sistem)_";
                     $this->sendMessage($from, $caption);
@@ -402,20 +431,34 @@ class WhatsAppController extends Controller
             'cancel', 'iya', 'ya', 'ok', 'oke', 'okay', 'setuju', 'selesai', 'pesan',
             'order', 'beli', 'gambar', 'foto', 'harga', 'stok', 'info', 'mau', 'ingin',
         ];
-        foreach ($flags as $kw) {
-            if (str_contains($lower, $kw)) {
-                return true;
-            }
-        }
+        // Whole words only (optionally with the "-nya" suffix, e.g. "harganya"),
+        // so names/addresses like "Surya", "Jl. ... Raya", "Maulana",
+        // "Jl. Beringin" or "Jl. Pesantren" aren't mistaken for commands.
+        $pattern = '/\b(?:'.implode('|', array_map(fn ($kw) => preg_quote($kw, '/'), $flags)).')(?:nya)?\b/u';
 
-        return false;
+        return preg_match($pattern, $lower) === 1;
     }
 
     private function isConfirmation(string $body): bool
     {
-        $lower = strtolower(trim($body));
+        // Trailing punctuation is ignored so "ya." / "oke!" still confirm.
+        $lower = rtrim(strtolower(trim($body)), " \t.,!");
 
         return in_array($lower, ['ya', 'iya', 'ok', 'oke', 'okay', 'setuju', 'yes', 'yep', 'yap', 'confirm']);
+    }
+
+    /**
+     * The question the bot is waiting on while collecting order details,
+     * or null when the session isn't in a collecting step.
+     */
+    private function collectingStepPrompt(WhatsAppSession $session): ?string
+    {
+        return match ($session->step) {
+            'need_name' => 'Siap! Boleh minta nama Anda untuk pesanan ini?',
+            'need_address' => "Boleh minta alamat pengirimannya, *{$session->customer_name}*?\n_(Ketik *ambil sendiri* jika akan mengambil langsung ke toko)_",
+            'need_payment' => $this->paymentPrompt(),
+            default => null,
+        };
     }
 
     private function paymentPrompt(): string
@@ -585,6 +628,7 @@ Panduan:
 - Jika pembeli mau memesan, tambahkan ke cart_add.
 - Jika pelanggan menggunakan kata 'tambah', 'pesan', 'mau', 'beli', 'order' diikuti nama produk dan jumlah, langsung tambahkan ke cart_add TANPA tanya konfirmasi lagi.
 - Tampilkan gambar (show_products) jika pembeli menanyakan atau ingin melihat produk tertentu.
+- Sistem akan OTOMATIS mengirim foto produk (maksimal 3) untuk setiap nama produk yang kamu isi di show_products. Jadi kamu BISA mengirim foto: jangan pernah menjawab bahwa kamu tidak dapat mengirim gambar/foto. Cukup isi show_products dan tulis misalnya \"Berikut fotonya kak.\"
 - Jika pelanggan bertanya produk apa saja yang tersedia (contoh: ada apa, ada barang apa, produk apa saja, ada apa lagi), tampilkan MAKSIMAL 10 produk saja dalam format singkat satu baris: \`- Nama Produk - Rp harga/satuan\`, lalu tambahkan catatan (ketik nama produk untuk info lebih detail). JANGAN tampilkan semua produk sekaligus karena akan terlalu panjang.
 - Jawab singkat dan ramah dalam Bahasa Indonesia.
 
@@ -629,7 +673,7 @@ Balas dalam format JSON:
             ->map(fn ($name) => Product::where('stock', '>', 0)
                 ->whereRaw('LOWER(product_name) LIKE ?', ['%'.strtolower($name).'%'])
                 ->first())
-            ->filter(fn ($p) => $p && $p->image);
+            ->filter(fn ($p) => $p && ($p->image_path || $p->image));
 
         return [$reply, $productsToShow, $cartAdd];
     }
@@ -771,17 +815,28 @@ Balas dalam format JSON:
             $pickedIndex = isset($numMatch[1]) ? ((int) $numMatch[1] - 1) : null;
         }
 
+        $stockIssues = [];
+        $addPicked = function (array $opt, array $item) use (&$cart, &$added, &$stockIssues): void {
+            $product = Product::where('id', $opt['id'])->where('stock', '>', 0)->first();
+            if (! $product) {
+                return;
+            }
+            $shortfall = $this->stockShortfallMessage($cart, $product, (float) $item['qty'], (string) $item['unit'], true);
+            if ($shortfall !== null) {
+                $stockIssues[] = $shortfall;
+
+                return;
+            }
+            $cart = $this->addToCart($cart, $product, $item['qty'], $item['unit'], true);
+            $added[] = $product->product_name;
+        };
+
         foreach ($pending as $item) {
             $options = $item['options']; // [['id' => X, 'name' => 'Y'], ...]
 
             // Number pick takes priority
             if ($pickedIndex !== null && isset($options[$pickedIndex])) {
-                $opt = $options[$pickedIndex];
-                $product = Product::where('id', $opt['id'])->where('stock', '>', 0)->first();
-                if ($product) {
-                    $cart = $this->addToCart($cart, $product, $item['qty'], $item['unit'], true);
-                    $added[] = $product->product_name;
-                }
+                $addPicked($options[$pickedIndex], $item);
 
                 continue;
             }
@@ -807,12 +862,7 @@ Balas dalam format JSON:
                 $topMatches = array_keys(array_filter($scores, fn ($s) => $s === $topScore));
 
                 if (count($topMatches) === 1) {
-                    $opt = $options[$topMatches[0]];
-                    $product = Product::where('id', $opt['id'])->where('stock', '>', 0)->first();
-                    if ($product) {
-                        $cart = $this->addToCart($cart, $product, $item['qty'], $item['unit'], true);
-                        $added[] = $product->product_name;
-                    }
+                    $addPicked($options[$topMatches[0]], $item);
                 } else {
                     $stillPending[] = $item; // still ambiguous after reply
                 }
@@ -821,7 +871,7 @@ Balas dalam format JSON:
             }
         }
 
-        if (empty($added)) {
+        if (empty($added) && empty($stockIssues)) {
             // Nothing resolved — let normal intent detection handle this message
             return [false, ''];
         }
@@ -838,9 +888,14 @@ Balas dalam format JSON:
             return "• {$i['product_name']} × {$qty} {$unit} — Rp".number_format($i['subtotal'], 0, ',', '.');
         })->join("\n");
 
-        $reply = '✅ Ditambahkan: *'.implode(', ', $added).'*';
-        $reply .= "\n\n🛒 *Semua item di keranjang:*\n{$cartLines}";
-        $reply .= "\n\n💰 *Total: Rp".number_format($total, 0, ',', '.').'*';
+        $reply = empty($added) ? implode("\n", $stockIssues) : '✅ Ditambahkan: *'.implode(', ', $added).'*';
+        if (! empty($added) && ! empty($stockIssues)) {
+            $reply .= "\n\n".implode("\n", $stockIssues);
+        }
+        if (! empty($cart)) {
+            $reply .= "\n\n🛒 *Semua item di keranjang:*\n{$cartLines}";
+            $reply .= "\n\n💰 *Total: Rp".number_format($total, 0, ',', '.').'*';
+        }
 
         if (! empty($stillPending)) {
             foreach ($stillPending as $item) {
@@ -862,6 +917,7 @@ Balas dalam format JSON:
         $matched = [];
         $clarify = [];
         $notFound = [];
+        $stockIssues = [];
 
         $pending = [];
 
@@ -876,6 +932,14 @@ Balas dalam format JSON:
 
             if ($found->count() === 1) {
                 $product = $found->first();
+
+                $shortfall = $this->stockShortfallMessage($cart, $product, $qty, $unit, true);
+                if ($shortfall !== null) {
+                    $stockIssues[] = $shortfall;
+
+                    continue;
+                }
+
                 [$convertedQty, $saleUnit, , $subtotal] = $this->convertUnit($qty, $unit, $product);
                 $cart = $this->addToCart($cart, $product, $qty, $unit, true); // replace, not accumulate
 
@@ -924,6 +988,9 @@ Balas dalam format JSON:
         }
         if (! empty($notFound)) {
             $lines[] = "\n\n*Tidak ditemukan:*\n".implode("\n", $notFound);
+        }
+        if (! empty($stockIssues)) {
+            $lines[] = "\n\n*Stok tidak cukup:*\n".implode("\n", $stockIssues);
         }
 
         if (! empty($cart)) {
@@ -1015,12 +1082,16 @@ Balas dalam format JSON:
         $session->save();
 
         $transferInfo = '';
-        if (($session->payment_method ?? '') === 'Transfer Bank') {
+        $bankAccount = trim((string) config('services.shop.bank_account'));
+        if (($session->payment_method ?? '') === 'Transfer Bank' && $bankAccount !== '') {
             $transferInfo = "\n\n💳 *Silakan transfer ke:*\n"
-                          ."🏦 Bank BCA\n"
-                          ."📋 No. Rekening: *1234567890*\n"
-                          ."👤 Atas Nama: *Toko Sentosa*\n\n"
+                          .'🏦 Bank '.config('services.shop.bank_name')."\n"
+                          ."📋 No. Rekening: *{$bankAccount}*\n"
+                          .'👤 Atas Nama: *'.config('services.shop.bank_account_name')."*\n\n"
                           .'Konfirmasi pembayaran dengan kirim bukti transfer ke nomor ini.';
+        } elseif (($session->payment_method ?? '') === 'Transfer Bank') {
+            // No account configured yet — never show a placeholder number.
+            $transferInfo = "\n\n💳 Info rekening untuk transfer akan dikirimkan oleh admin kami. Mohon tunggu konfirmasinya ya 🙏";
         }
 
         $reply = "✅ *Pesanan Berhasil Dibuat!*\n\n"
@@ -1092,6 +1163,29 @@ Balas dalam format JSON:
         ];
 
         return $cart;
+    }
+
+    /**
+     * Friendly refusal when adding $qty $unit of $product would push the
+     * cart past the product's stock (compared in base units/Buah), or null
+     * when it fits. $replace mirrors addToCart(): true = the new qty
+     * replaces the existing cart line, false = it is added on top.
+     */
+    private function stockShortfallMessage(array $cart, Product $product, float $qty, string $unit, bool $replace): ?string
+    {
+        $existing = collect($cart)->firstWhere('product_id', $product->id);
+        $existingBase = $existing && ! $replace
+            ? UnitConverter::toBaseUnit((float) $existing['qty'], (string) $existing['unit'], $product)
+            : 0.0;
+
+        if ($existingBase + UnitConverter::toBaseUnit($qty, $unit, $product) <= (float) $product->stock) {
+            return null;
+        }
+
+        $requested = (fmod($qty, 1) === 0.0) ? (int) $qty : $qty;
+
+        return "⚠️ Maaf, stok *{$product->product_name}* hanya {$product->stok_display}, jadi {$requested} ".ucfirst(strtolower($unit))
+             .' belum bisa ditambahkan. Silakan kirim jumlah yang lebih kecil (maksimal sesuai stok tersebut).';
     }
 
     private function formatCartSummary(array $cart): string

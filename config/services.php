@@ -61,6 +61,9 @@ return [
         'bank_name' => env('SHOP_BANK_NAME', ''),
         'bank_account' => env('SHOP_BANK_ACCOUNT', ''),
         'bank_account_name' => env('SHOP_BANK_ACCOUNT_NAME', ''),
+        // Owner's WhatsApp number notified when a transfer receipt arrives.
+        // Empty = no notification.
+        'owner_whatsapp' => env('SHOP_OWNER_WHATSAPP', ''),
     ],
 
     'supabase' => [

@@ -13,6 +13,7 @@ use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
@@ -54,6 +55,34 @@ class WhatsAppController extends Controller
      * @var list<string>
      */
     private const FONNTE_MEDIA_FIELDS = ['url', 'file', 'media', 'attachment'];
+
+    /**
+     * Photo extensions accepted as a possible transfer receipt. WebP is left
+     * out on purpose: WhatsApp stickers are sent as .webp.
+     *
+     * @var list<string>
+     */
+    private const IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png'];
+
+    /**
+     * Order verbs a customer puts before a quantity ("pesan 2 lusin") — never
+     * part of a product name.
+     *
+     * @var list<string>
+     */
+    private const ORDER_VERBS = ['pesan', 'mau', 'beli', 'order', 'ambil', 'tambah'];
+
+    /**
+     * Units recognized in a quantity-only reply such as "2 lusin".
+     *
+     * @var list<string>
+     */
+    private const QUANTITY_UNITS = ['buah', 'pcs', 'biji', 'lusin', 'kodi', 'gross', 'pak', 'set', 'dus', 'goni', 'karton'];
+
+    private const HOW_TO_ORDER_REPLY = "Untuk memesan, ketik nama produk beserta jumlah dan satuannya, contoh: *TOPLES JUMBO 2 lusin*.\n"
+        .'Belum tahu nama produknya? Tanyakan dulu, misalnya: *ada toples?* — setelah produknya tampil, cukup balas jumlahnya (contoh: *2 lusin*).';
+
+    private const TRANSFER_PROOF_REPLY = 'Bukti transfer diterima. Admin akan memeriksa dan mengonfirmasi pesanan Anda. Terima kasih 🙏';
 
     // ─── Entry point ──────────────────────────────────────────────────────────
 
@@ -192,6 +221,14 @@ class WhatsAppController extends Controller
                 // (allows customer to ask questions or add more items)
             }
 
+            // ── Priority 1c.5: quantity-only follow-up ("pesan 2 lusin") ──────────
+            // Refers to the product(s) the bot just showed; never sent to GPT,
+            // which would otherwise extract the verb itself as a product name.
+            if (! $handled && empty($session->pending_clarification) && ($quantity = $this->parseQuantityOnly($body)) !== null) {
+                [$reply, $productsToShow] = $this->handleQuantityOnly($quantity['qty'], $quantity['unit'], $session);
+                $handled = true;
+            }
+
             // ── Priority 1d: resolve pending clarification ────────────────────────
             // Never hijack a message that looks like a brand new multi-item
             // bulk order — otherwise a leftover unresolved clarification from
@@ -214,6 +251,7 @@ class WhatsAppController extends Controller
                 if ($mode === 'cancel') {
                     $session->cart = [];
                     $session->pending_clarification = null;
+                    $session->last_shown_products = null;
                     $session->step = 'chat';
                     $session->save();
                     $reply = 'Pesanan dibatalkan. Ada yang bisa kami bantu lagi?';
@@ -239,7 +277,9 @@ class WhatsAppController extends Controller
                     [$reply, $productsToShow] = $this->handleBulkOrder($bulkItems, $session);
 
                 } else {
-                    // Stage 2: search DB with extracted keywords
+                    // Stage 2: search DB with extracted keywords (order verbs
+                    // like "pesan"/"mau" are never product keywords)
+                    $keywords = array_values(array_filter(array_map(fn ($kw) => $this->stripOrderVerbs((string) $kw), $keywords)));
                     $matchedProducts = $this->searchByKeywords($keywords);
 
                     // Stage 3: GPT generates reply using only the relevant product subset
@@ -247,8 +287,12 @@ class WhatsAppController extends Controller
 
                     $cart = $session->cart ?? [];
                     foreach ($cartAdd as $item) {
+                        $cartAddName = $this->stripOrderVerbs((string) ($item['product_name'] ?? ''));
+                        if ($cartAddName === '') {
+                            continue;
+                        }
                         $product = Product::where('stock', '>', 0)
-                            ->whereRaw('LOWER(product_name) LIKE ?', ['%'.strtolower($item['product_name'] ?? '').'%'])
+                            ->whereRaw('LOWER(product_name) LIKE ?', ['%'.strtolower($cartAddName).'%'])
                             ->first();
                         if ($product) {
                             $qty = (float) ($item['qty'] ?? 1);
@@ -269,6 +313,7 @@ class WhatsAppController extends Controller
 
                     $session->cart = $cart;
                     $session->messages = $history;
+                    $session->last_shown_products = $this->shownProductIds((string) $reply, $matchedProducts, $productsToShow);
                     if (! in_array($session->step, ['confirm_order', 'need_name', 'need_address', 'need_payment'])) {
                         $session->step = 'chat';
                     }
@@ -461,6 +506,90 @@ class WhatsAppController extends Controller
         };
     }
 
+    /**
+     * "2 lusin", "pesan 2 lusin", "mau 3 buah", "ambil 1,5 lusin aja" →
+     * ['qty' => 2.0, 'unit' => 'lusin']; null for anything else.
+     *
+     * @return array{qty: float, unit: string}|null
+     */
+    private function parseQuantityOnly(string $body): ?array
+    {
+        $pattern = '/^(?:(?:'.implode('|', self::ORDER_VERBS).')\s+)?(\d+(?:[.,]\d+)?)\s*('.implode('|', self::QUANTITY_UNITS).')'
+                  .'(?:\s+(?:saja|aja|ya|kak|dong|deh))*\s*[.!]*$/iu';
+
+        if (! preg_match($pattern, trim($body), $m)) {
+            return null;
+        }
+
+        return ['qty' => (float) str_replace(',', '.', $m[1]), 'unit' => strtolower($m[2])];
+    }
+
+    /**
+     * Quantity-only reply: one product last shown → normal bulk flow
+     * (unit conversion, stock check, price); several → ask which one via the
+     * existing clarification flow; none → explain how to order.
+     */
+    private function handleQuantityOnly(float $qty, string $unit, WhatsAppSession $session): array
+    {
+        $ids = $session->last_shown_products ?? [];
+        $products = Product::whereIn('id', $ids)->where('stock', '>', 0)->get()
+            ->sortBy(fn ($p) => array_search($p->id, $ids))
+            ->values();
+
+        if ($products->count() === 1) {
+            return $this->handleBulkOrder([['item' => $products->first()->product_name, 'qty' => $qty, 'unit' => $unit]], $session);
+        }
+
+        if ($products->isEmpty()) {
+            return [self::HOW_TO_ORDER_REPLY, collect()];
+        }
+
+        $displayQty = (fmod($qty, 1) === 0.0) ? (int) $qty : $qty;
+        $session->pending_clarification = [[
+            'original' => "{$displayQty} {$unit}",
+            'options' => $products->map(fn ($p) => ['id' => $p->id, 'name' => $p->product_name])->all(),
+            'qty' => $qty,
+            'unit' => $unit,
+        ]];
+        $session->save();
+
+        $options = $products->values()->map(fn ($p, $i) => ($i + 1).". {$p->product_name}")->join("\n");
+
+        return ["Produk yang mana untuk {$displayQty} ".ucfirst($unit)."?\n{$options}\n\nBalas dengan nomornya (contoh: *1*).", collect()];
+    }
+
+    private function stripOrderVerbs(string $name): string
+    {
+        return trim((string) preg_replace('/^(?:(?:'.implode('|', self::ORDER_VERBS).')\b\s*)+/iu', '', trim($name)));
+    }
+
+    /**
+     * IDs (max 5) of the products a chat reply actually showed: named in the
+     * reply text, or sent as a photo. A name that only appears inside a
+     * longer listed name ("TOPLES JUMBO" in "TOPLES JUMBO SEALWARE 25 KG")
+     * isn't counted unless it also appears on its own.
+     *
+     * @return list<int>|null
+     */
+    private function shownProductIds(string $reply, Collection $promptProducts, Collection $photoProducts): ?array
+    {
+        $lowerReply = mb_strtolower($reply);
+        $named = $promptProducts->filter(fn ($p) => str_contains($lowerReply, mb_strtolower($p->product_name)));
+
+        $shown = $named->filter(function ($p) use ($named, $lowerReply) {
+            $name = mb_strtolower($p->product_name);
+            $insideLonger = $named
+                ->filter(fn ($q) => $q->id !== $p->id && mb_strlen($q->product_name) > mb_strlen($name) && str_contains(mb_strtolower($q->product_name), $name))
+                ->sum(fn ($q) => substr_count($lowerReply, mb_strtolower($q->product_name)));
+
+            return substr_count($lowerReply, $name) > $insideLonger;
+        });
+
+        $ids = $shown->pluck('id')->merge($photoProducts->pluck('id'))->unique()->take(5)->values()->all();
+
+        return $ids === [] ? null : $ids;
+    }
+
     private function paymentPrompt(): string
     {
         return "Pembayaran dilakukan dengan cara apa?\n\n"
@@ -537,7 +666,8 @@ Panduan mode:
 - Ekstrak qty dan unit PERSIS seperti yang dikatakan pelanggan. JANGAN konversi atau ubah satuan.
 - Contoh BENAR: "3 lusin" → {"qty": 3, "unit": "lusin"}
 - Contoh SALAH: "3 lusin" → {"qty": 36, "unit": "buah"} ← DILARANG
-- unit default "buah" jika tidak disebutkan sama sekali.',
+- unit default "buah" jika tidak disebutkan sama sekali.
+- Kata kerja seperti "pesan", "mau", "beli", "order", "ambil" BUKAN nama produk — jangan masukkan ke item maupun keywords.',
                 ],
                 ['role' => 'user', 'content' => $body],
             ],
@@ -629,6 +759,7 @@ Panduan:
 - Jika pelanggan menggunakan kata 'tambah', 'pesan', 'mau', 'beli', 'order' diikuti nama produk dan jumlah, langsung tambahkan ke cart_add TANPA tanya konfirmasi lagi.
 - Tampilkan gambar (show_products) jika pembeli menanyakan atau ingin melihat produk tertentu.
 - Sistem akan OTOMATIS mengirim foto produk (maksimal 3) untuk setiap nama produk yang kamu isi di show_products. Jadi kamu BISA mengirim foto: jangan pernah menjawab bahwa kamu tidak dapat mengirim gambar/foto. Cukup isi show_products dan tulis misalnya \"Berikut fotonya kak.\"
+- Cara memesan yang benar: pelanggan mengetik nama produk + jumlah + satuan (contoh: \"TOPLES JUMBO SEALWARE 25 KG 2 lusin\"). Jika kamu baru menampilkan SATU produk, pelanggan cukup membalas jumlah dan satuan (contoh: \"2 lusin\"). JANGAN pernah membuat perintah atau format lain seperti \"ketik 'pesan'\", kode, atau nomor perintah.
 - Jika pelanggan bertanya produk apa saja yang tersedia (contoh: ada apa, ada barang apa, produk apa saja, ada apa lagi), tampilkan MAKSIMAL 10 produk saja dalam format singkat satu baris: \`- Nama Produk - Rp harga/satuan\`, lalu tambahkan catatan (ketik nama produk untuk info lebih detail). JANGAN tampilkan semua produk sekaligus karena akan terlalu panjang.
 - Jawab singkat dan ramah dalam Bahasa Indonesia.
 
@@ -925,9 +1056,13 @@ Balas dalam format JSON:
         $pending = [];
 
         foreach ($bulkItems as $item) {
-            $name = $item['item'] ?? '';
+            // "pesan"/"mau"/"beli" is never (part of) a product name.
+            $name = $this->stripOrderVerbs((string) ($item['item'] ?? ''));
             $qty = (float) ($item['qty'] ?? 1);
             $unit = $item['unit'] ?? 'buah';
+            if ($name === '') {
+                continue;
+            }
 
             \Log::debug('WhatsApp bulk item extracted', ['name' => $name, 'qty' => $qty, 'unit' => $unit]);
 
@@ -995,6 +1130,12 @@ Balas dalam format JSON:
                 'qty' => $amb['qty'],
                 'unit' => $amb['unit'],
             ];
+        }
+
+        // Every item was just an order verb (e.g. GPT returned "pesan") —
+        // explain how to order instead of an empty recap, session untouched.
+        if (empty($matched) && empty($ambiguous) && empty($notFound) && empty($stockIssues)) {
+            return [self::HOW_TO_ORDER_REPLY, collect()];
         }
 
         $session->cart = $cart;
@@ -1104,6 +1245,7 @@ Balas dalam format JSON:
 
         $session->cart = [];
         $session->pending_clarification = null;
+        $session->last_shown_products = null;
         $session->step = 'chat';
         $session->save();
 
@@ -1421,6 +1563,13 @@ Balas dalam format JSON:
 
         $audioUrl = $this->findFonnteAudioUrl($request);
         if ($audioUrl === null) {
+            // A photo may be a transfer receipt for a pending order; anything
+            // else (sticker, document…) keeps the generic unsupported reply.
+            $imageUrl = $this->findFonnteImageUrl($request);
+            if ($imageUrl !== null && $this->handleTransferProof($from, $imageUrl)) {
+                return [null, ''];
+            }
+
             return [$from, ''];
         }
 
@@ -1443,6 +1592,12 @@ Balas dalam format JSON:
      */
     private function findFonnteAudioUrl(Request $request): ?string
     {
+        // An explicit non-audio type wins over the "no extension = try as
+        // audio" fallback below, so a photo is never sent to Whisper.
+        if (in_array(strtolower(trim((string) $request->input('type', ''))), ['image', 'sticker', 'video', 'document'], true)) {
+            return null;
+        }
+
         foreach (self::FONNTE_MEDIA_FIELDS as $field) {
             $value = $request->input($field);
             if (! is_string($value) || ! str_contains($value, 'http')) {
@@ -1455,6 +1610,90 @@ Balas dalam format JSON:
         }
 
         return null;
+    }
+
+    /**
+     * First http(s) URL in the Fonnte media fields when the message is a
+     * photo: Fonnte's "type" field says "image", or — when no type is sent —
+     * the extension is a photo format.
+     */
+    private function findFonnteImageUrl(Request $request): ?string
+    {
+        $type = strtolower(trim((string) $request->input('type', '')));
+        if ($type !== '' && $type !== 'image') {
+            return null;
+        }
+
+        foreach (self::FONNTE_MEDIA_FIELDS as $field) {
+            $value = $request->input($field);
+            if (! is_string($value) || ! str_contains($value, 'http')) {
+                continue;
+            }
+
+            return ($type === 'image' || in_array($this->fonnteMediaExtension($request, $value), self::IMAGE_EXTENSIONS, true))
+                ? $value
+                : null;
+        }
+
+        return null;
+    }
+
+    /**
+     * Treats a photo as a transfer receipt when the sender has an unpaid
+     * bank-transfer order: appends a timestamped line to that sale's notes,
+     * acknowledges the customer and optionally pings the owner. The image
+     * itself is never downloaded or read. Returns false (caller falls back
+     * to the generic reply) when no such order exists.
+     *
+     * Idempotent per image URL, so a duplicated webhook adds nothing twice.
+     */
+    private function handleTransferProof(string $from, string $imageUrl): bool
+    {
+        // Customers from the chatbot store "whatsapp:+62…"; ones typed in by
+        // staff may use "+62…", "62…" or "08…".
+        $digits = preg_replace('/\D/', '', $from);
+        $phoneVariants = [$from, '+'.$digits, $digits, '0'.substr($digits, 2)];
+
+        $sale = Sale::whereIn('customer_id', Customer::whereIn('phone', $phoneVariants)->select('id'))
+            ->where('payment_status', 'Belum Bayar')
+            // "Transfer Bank" from the chatbot, "Transfer" from the toko/admin forms.
+            ->whereIn('payment_method', ['Transfer Bank', 'Transfer'])
+            ->latest('sale_id')
+            ->first();
+
+        if (! $sale) {
+            return false;
+        }
+
+        $invoiceNo = 'INV-'.str_pad((string) $sale->sale_id, 6, '0', STR_PAD_LEFT);
+        Log::info('Transfer proof image received', ['from' => $from, 'sale_id' => $sale->sale_id, 'invoice' => $invoiceNo, 'image_url' => $imageUrl]);
+
+        $proofKey = 'whatsapp:transfer-proof:'.sha1($imageUrl);
+        if (! Cache::add($proofKey, $sale->sale_id, now()->addDays(30))) {
+            Log::info('Transfer proof already recorded, ignoring duplicate', ['from' => $from, 'sale_id' => $sale->sale_id]);
+
+            return true;
+        }
+
+        $line = 'Bukti transfer dikirim '.now()->toWib()->format('d/m/Y H:i').' WIB';
+        $sale->notes = $sale->notes ? $sale->notes."\n".$line : $line;
+        try {
+            $sale->save();
+        } catch (\Throwable $e) {
+            // Let a webhook retry record it instead of treating it as a duplicate.
+            Cache::forget($proofKey);
+
+            throw $e;
+        }
+
+        $this->sendMessage($from, self::TRANSFER_PROOF_REPLY);
+
+        $owner = trim((string) config('services.shop.owner_whatsapp'));
+        if ($owner !== '') {
+            $this->sendMessage($owner, "Bukti transfer masuk dari {$digits} untuk invoice {$invoiceNo}.");
+        }
+
+        return true;
     }
 
     /**

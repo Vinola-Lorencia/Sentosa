@@ -13,19 +13,18 @@ class ProductController extends Controller
     public function __construct(
         private SupabaseStorageService $supabaseStorage,
         private ImageCompressionService $imageCompression,
-    ) {
-    }
+    ) {}
 
     public function index(Request $request)
     {
         $query = Product::query();
 
         if ($request->filled('search')) {
-            $query->whereRaw('LOWER(product_name) LIKE ?', ['%' . strtolower($request->search) . '%']);
+            $query->whereRaw('LOWER(product_name) LIKE ?', ['%'.strtolower($request->search).'%']);
         }
 
         if ($request->filled('brand')) {
-            $query->whereRaw('LOWER(brand) LIKE ?', ['%' . strtolower($request->brand) . '%']);
+            $query->whereRaw('LOWER(brand) LIKE ?', ['%'.strtolower($request->brand).'%']);
         }
 
         if ($request->stock == 'available') {
@@ -80,21 +79,21 @@ class ProductController extends Controller
     public function store(Request $request)
     {
         $data = $request->validate([
-            'product_name'         => ['required', 'string', 'max:255', 'unique:products,product_name'],
-            'stock_qty'            => ['required', 'numeric', 'min:0'],
-            'stock_unit'           => ['required', 'in:Buah,Lusin,Kodi,Gross'],
+            'product_name' => ['required', 'string', 'max:255', 'unique:products,product_name'],
+            'stock_qty' => ['required', 'numeric', 'min:0'],
+            'stock_unit' => ['required', 'in:Buah,Lusin,Kodi,Gross'],
             // 10MB cap on the ORIGINAL upload — compression happens after
             // validation passes (see storeProductPhoto()), so this only
             // needs to be generous enough for raw high-res phone camera
             // photos, not the final stored size.
-            'image'                => ['required', 'image', 'mimes:jpg,jpeg,png,webp', 'max:10240'],
-            'brand'                => ['nullable', 'string', 'max:255'],
-            'default_buy_price'    => ['nullable', 'numeric', 'min:0'],
+            'image' => ['required', 'image', 'mimes:jpg,jpeg,png,webp', 'max:10240'],
+            'brand' => ['nullable', 'string', 'max:255'],
+            'default_buy_price' => ['nullable', 'numeric', 'min:0'],
             'default_buy_discount' => ['nullable', 'numeric', 'min:0', 'max:100'],
-            'sale_price'           => ['nullable', 'numeric', 'min:0'],
-            'sale_unit'            => ['nullable', 'string'],
-            'purchase_unit'        => ['nullable', 'string'],
-            'dus_to_unit'          => ['nullable', 'numeric', 'min:0'],
+            'sale_price' => ['nullable', 'numeric', 'min:0'],
+            'sale_unit' => ['nullable', 'string'],
+            'purchase_unit' => ['nullable', 'string'],
+            'dus_to_unit' => ['nullable', 'numeric', 'min:0'],
         ], [
             'product_name.unique' => 'Produk dengan nama ini sudah terdaftar. Periksa kembali sebelum menambahkan.',
         ]);
@@ -102,12 +101,12 @@ class ProductController extends Controller
         // Optional fields are NOT NULL (or should be a sane default rather
         // than a bare empty string) in the products table, so a blank
         // submission needs to be coerced here rather than left for the DB.
-        $data['default_buy_price']    = $this->blankToDefault($data['default_buy_price'] ?? null, 0);
+        $data['default_buy_price'] = $this->blankToDefault($data['default_buy_price'] ?? null, 0);
         $data['default_buy_discount'] = $this->blankToDefault($data['default_buy_discount'] ?? null, 0);
-        $data['sale_price']           = $this->blankToDefault($data['sale_price'] ?? null, 0);
-        $data['sale_unit']            = $this->blankToDefault($data['sale_unit'] ?? null, 'Buah');
-        $data['purchase_unit']        = $this->blankToDefault($data['purchase_unit'] ?? null, 'Goni');
-        $data['dus_to_unit']          = $this->blankToDefault($data['dus_to_unit'] ?? null, 1);
+        $data['sale_price'] = $this->blankToDefault($data['sale_price'] ?? null, 0);
+        $data['sale_unit'] = $this->blankToDefault($data['sale_unit'] ?? null, 'Buah');
+        $data['purchase_unit'] = $this->blankToDefault($data['purchase_unit'] ?? null, 'Goni');
+        $data['dus_to_unit'] = $this->blankToDefault($data['dus_to_unit'] ?? null, 1);
 
         // stock is always stored in Buah — convert the entered qty+unit
         // using the same UNIT_TO_BASE table the rest of the app uses.
@@ -141,11 +140,11 @@ class ProductController extends Controller
 
         $existing = Product::whereRaw(
             'LOWER(product_name) LIKE ?',
-            ['%' . strtolower($name) . '%']
+            ['%'.strtolower($name).'%']
         )->limit(3)->get(['product_name']);
 
         return response()->json([
-            'found'   => $existing->isNotEmpty(),
+            'found' => $existing->isNotEmpty(),
             'matches' => $existing->pluck('product_name'),
         ]);
     }
@@ -184,13 +183,13 @@ class ProductController extends Controller
                 $activityAt = $isPhotoActivity ? $product->updated_at : $product->created_at;
 
                 return [
-                    'id'           => $product->id,
+                    'id' => $product->id,
                     'product_name' => $product->product_name,
-                    'stock'        => (float) $product->stock,
+                    'stock' => (float) $product->stock,
                     'stok_display' => $product->stok_display,
-                    'activity'     => $isPhotoActivity ? 'Mengubah Foto' : 'Menambah Produk',
-                    'created_at'   => $activityAt?->toWib()->format('d M Y H:i') ?? '-',
-                    'edit_url'     => route('products.edit', $product->id),
+                    'activity' => $isPhotoActivity ? 'Mengubah Foto' : 'Menambah Produk',
+                    'created_at' => $activityAt?->toWib()->format('d M Y H:i') ?? '-',
+                    'edit_url' => route('products.edit', $product->id),
                 ];
             }),
         ]);
@@ -204,17 +203,17 @@ class ProductController extends Controller
     public function update(Request $request, Product $product)
     {
         $data = $request->validate([
-            'product_name'         => ['required', 'string', 'max:255'],
-            'sale_price'           => ['required', 'numeric', 'min:0'],
-            'brand'                => ['nullable', 'string', 'max:255'],
-            'image'                => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:10240'],
-            'default_buy_price'    => ['required', 'numeric', 'min:0'],
+            'product_name' => ['required', 'string', 'max:255'],
+            'sale_price' => ['required', 'numeric', 'min:0'],
+            'brand' => ['nullable', 'string', 'max:255'],
+            'image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:10240'],
+            'default_buy_price' => ['required', 'numeric', 'min:0'],
             'default_buy_discount' => ['required', 'numeric', 'min:0'],
-            'sale_unit'            => ['required', 'string', 'max:50'],
-            'purchase_unit'        => ['required', 'string', 'max:50'],
-            'dus_to_unit'          => ['required', 'numeric', 'min:0.01'],
-            'stock_qty'            => ['required', 'numeric', 'min:0'],
-            'stock_unit'           => ['required', 'in:Buah,Lusin,Kodi,Gross'],
+            'sale_unit' => ['required', 'string', 'max:50'],
+            'purchase_unit' => ['required', 'string', 'max:50'],
+            'dus_to_unit' => ['required', 'numeric', 'min:0.01'],
+            'stock_qty' => ['required', 'numeric', 'min:0'],
+            'stock_unit' => ['required', 'in:Buah,Lusin,Kodi,Gross'],
         ]);
 
         // stock is always stored in Buah — same conversion as store().
@@ -226,14 +225,12 @@ class ProductController extends Controller
 
         // Upload gambar baru ke Supabase Storage — hapus yang lama
         if ($request->hasFile('image')) {
-            $data['image_path'] = $this->storeProductPhoto($request->file('image'), $product->image_path);
+            $data['image_path'] = $this->storeProductPhoto($request->file('image'), $product);
         }
 
         // Hapus gambar kalau dicentang
         if ($request->boolean('remove_image')) {
-            if ($product->image_path) {
-                $this->supabaseStorage->delete($product->image_path);
-            }
+            $this->deleteProductPhoto($product);
             $data['image_path'] = null;
         }
 
@@ -253,9 +250,7 @@ class ProductController extends Controller
         }
 
         // Hapus gambar saat produk dihapus
-        if ($product->image_path) {
-            $this->supabaseStorage->delete($product->image_path);
-        }
+        $this->deleteProductPhoto($product);
 
         $product->delete();
 
@@ -271,13 +266,13 @@ class ProductController extends Controller
         ]);
 
         $product->update([
-            'image_path' => $this->storeProductPhoto($request->file('image'), $product->image_path),
+            'image_path' => $this->storeProductPhoto($request->file('image'), $product),
             'updated_by' => auth()->id(),
         ]);
 
         return response()->json([
-            'success'    => true,
-            'image_url'  => $this->supabaseStorage->getPublicUrl($product->image_path),
+            'success' => true,
+            'image_url' => $this->supabaseStorage->getPublicUrl($product->image_path),
         ]);
     }
 
@@ -286,18 +281,38 @@ class ProductController extends Controller
         return $value === null || $value === '' ? $default : $value;
     }
 
-    private function storeProductPhoto($file, ?string $oldPath = null): string
+    private function storeProductPhoto($file, ?Product $product = null): string
     {
-        if ($oldPath) {
-            $this->supabaseStorage->delete($oldPath);
+        if ($product) {
+            $this->deleteProductPhoto($product);
         }
 
         // Resize/recompress before it ever reaches Supabase — always JPEG
         // out, so the extension here no longer follows the original upload.
         $compressed = $this->imageCompression->compress($file);
 
-        $path = 'products/' . uniqid('product_', true) . '.jpg';
+        $path = 'products/'.uniqid('product_', true).'.jpg';
 
         return $this->supabaseStorage->upload($compressed, $path);
+    }
+
+    /**
+     * Delete the product's photo from Supabase — unless another product
+     * still points at the same file (e.g. the shared placeholder from
+     * products:assign-dummy-photos), which would otherwise lose its photo.
+     */
+    private function deleteProductPhoto(Product $product): void
+    {
+        if (! $product->image_path) {
+            return;
+        }
+
+        $isShared = Product::where('image_path', $product->image_path)
+            ->whereKeyNot($product->getKey())
+            ->exists();
+
+        if (! $isShared) {
+            $this->supabaseStorage->delete($product->image_path);
+        }
     }
 }

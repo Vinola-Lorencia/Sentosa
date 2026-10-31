@@ -79,6 +79,27 @@ class WhatsAppController extends Controller
      */
     private const QUANTITY_UNITS = ['buah', 'pcs', 'biji', 'lusin', 'kodi', 'gross', 'pak', 'set', 'dus', 'goni', 'karton'];
 
+    /**
+     * Common abbreviations customers type for a unit.
+     */
+    private const UNIT_ALIASES = [
+        'lsn' => 'lusin', 'lsin' => 'lusin', 'lusinan' => 'lusin', 'pc' => 'pcs', 'bh' => 'buah',
+        'kd' => 'kodi', 'grs' => 'gross', 'gros' => 'gross', 'krt' => 'karton', 'ktn' => 'karton',
+    ];
+
+    /**
+     * Products refused for lack of stock while handling this message, so a
+     * follow-up like "30 lusin" (the offered maximum) knows which product.
+     *
+     * @var list<int>
+     */
+    private array $refusedProductIds = [];
+
+    /**
+     * Example quantity for the createOrder() stock refusal ("30 Lusin").
+     */
+    private ?string $lastOfferedQty = '2 Lusin';
+
     private const HOW_TO_ORDER_REPLY = "Untuk memesan, ketik nama produk beserta jumlah dan satuannya, contoh: *TOPLES JUMBO 2 lusin*.\n"
         .'Belum tahu nama produknya? Tanyakan dulu, misalnya: *ada toples?* — setelah produknya tampil, cukup balas jumlahnya (contoh: *2 lusin*).';
 
@@ -286,6 +307,8 @@ class WhatsAppController extends Controller
                     [$reply, $productsToShow, $cartAdd] = $this->generateChatReply($body, $session, $matchedProducts, $keywords);
 
                     $cart = $session->cart ?? [];
+                    $cartAdded = [];
+                    $cartProblems = [];
                     foreach ($cartAdd as $item) {
                         $cartAddName = $this->stripOrderVerbs((string) ($item['product_name'] ?? ''));
                         if ($cartAddName === '') {
@@ -294,17 +317,29 @@ class WhatsAppController extends Controller
                         $product = Product::where('stock', '>', 0)
                             ->whereRaw('LOWER(product_name) LIKE ?', ['%'.strtolower($cartAddName).'%'])
                             ->first();
-                        if ($product) {
-                            $qty = (float) ($item['qty'] ?? 1);
-                            $unit = $item['unit'] ?? $product->sale_unit;
-                            $shortfall = $this->stockShortfallMessage($cart, $product, $qty, $unit, false);
-                            if ($shortfall !== null) {
-                                $reply .= "\n\n".$shortfall;
+                        if (! $product) {
+                            $cartProblems[] = "❌ Maaf, produk *{$cartAddName}* tidak ditemukan atau stoknya habis, jadi belum ditambahkan ke keranjang.";
 
-                                continue;
-                            }
-                            $cart = $this->addToCart($cart, $product, $qty, $unit);
+                            continue;
                         }
+                        $qty = (float) ($item['qty'] ?? 1);
+                        $unit = $this->normalizeUnit((string) ($item['unit'] ?? $product->sale_unit), $product);
+                        $shortfall = $this->stockShortfallMessage($cart, $product, $qty, $unit, false);
+                        if ($shortfall !== null) {
+                            $cartProblems[] = $shortfall;
+
+                            continue;
+                        }
+                        $cart = $this->addToCart($cart, $product, $qty, $unit);
+                        $cartAdded[] = "{$product->product_name} × ".$this->formatQtyUnit($qty, $unit);
+                    }
+
+                    // GPT writes "sudah ditambahkan" before the system checks
+                    // stock — when anything was refused, the customer gets
+                    // what actually happened instead of GPT's claim.
+                    if ($cartProblems !== []) {
+                        $reply = ($cartAdded !== [] ? '✅ Ditambahkan: *'.implode(', ', $cartAdded)."*\n\n" : '')
+                               .implode("\n\n", $cartProblems);
                     }
 
                     $history = $session->messages ?? [];
@@ -314,6 +349,7 @@ class WhatsAppController extends Controller
                     $session->cart = $cart;
                     $session->messages = $history;
                     $session->last_shown_products = $this->shownProductIds((string) $reply, $matchedProducts, $productsToShow);
+                    $this->rememberRefusedProducts($session);
                     if (! in_array($session->step, ['confirm_order', 'need_name', 'need_address', 'need_payment'])) {
                         $session->step = 'chat';
                     }
@@ -953,13 +989,14 @@ Balas dalam format JSON:
             if (! $product) {
                 return;
             }
-            $shortfall = $this->stockShortfallMessage($cart, $product, (float) $item['qty'], (string) $item['unit'], true);
+            $unit = $this->normalizeUnit((string) $item['unit'], $product);
+            $shortfall = $this->stockShortfallMessage($cart, $product, (float) $item['qty'], $unit, true);
             if ($shortfall !== null) {
                 $stockIssues[] = $shortfall;
 
                 return;
             }
-            $cart = $this->addToCart($cart, $product, $item['qty'], $item['unit'], true);
+            $cart = $this->addToCart($cart, $product, (float) $item['qty'], $unit, true);
             $added[] = $product->product_name;
         };
 
@@ -1010,6 +1047,7 @@ Balas dalam format JSON:
 
         $session->cart = $cart;
         $session->pending_clarification = empty($stillPending) ? null : array_values($stillPending);
+        $this->rememberRefusedProducts($session);
         $session->save();
 
         $total = collect($cart)->sum('subtotal');
@@ -1071,6 +1109,7 @@ Balas dalam format JSON:
 
             if ($found->count() === 1) {
                 $product = $found->first();
+                $unit = $this->normalizeUnit((string) $unit, $product);
 
                 $shortfall = $this->stockShortfallMessage($cart, $product, $qty, $unit, true);
                 if ($shortfall !== null) {
@@ -1141,6 +1180,7 @@ Balas dalam format JSON:
 
         $session->cart = $cart;
         $session->pending_clarification = ! empty($pending) ? $pending : null;
+        $this->rememberRefusedProducts($session);
         $session->save();
 
         $lines = ['📋 *Rekap Pesanan:*'];
@@ -1186,6 +1226,18 @@ Balas dalam format JSON:
 
         if (empty($cart)) {
             return ['Keranjang kosong. Silakan pilih produk terlebih dahulu.', collect()];
+        }
+
+        // Stock may have changed since items were added (other orders, an
+        // old cart) — re-check before anything is saved.
+        $stockProblems = $this->cartStockProblems($cart);
+        if ($stockProblems !== []) {
+            $session->step = 'chat';
+            $this->rememberRefusedProducts($session);
+            $session->save();
+
+            return ["⚠️ Pesanan belum bisa dibuat karena stok tidak mencukupi:\n".implode("\n", $stockProblems)
+                ."\n\nBalas jumlah yang baru (contoh: *".strtolower((string) $this->lastOfferedQty).'*), lalu ketik *selesai* untuk konfirmasi ulang.', collect()];
         }
 
         $sale = null;
@@ -1285,6 +1337,7 @@ Balas dalam format JSON:
      */
     private function convertUnit(float $customerQty, string $customerUnit, Product $product): array
     {
+        $customerUnit = $this->normalizeUnit($customerUnit, $product);
         $unitUsed = $product->sale_unit ?: $customerUnit;
 
         // sale_price is quoted per sale_unit, so the quantity multiplied
@@ -1299,6 +1352,45 @@ Balas dalam format JSON:
         $subtotal = (float) $product->sale_price * $convertedQty;
 
         return [$convertedQty, $unitUsed, (float) $product->sale_price, $subtotal];
+    }
+
+    /**
+     * Customer's unit as a unit the converter knows. Stage 1 copies the unit
+     * exactly as typed, and an unknown word converts as 1 Buah — so a typo
+     * like "40 lisin" was checked against stock as 40 Buah. Abbreviations
+     * and near-misses (1 typo for short words, 2 for longer) map to the
+     * closest known unit; anything else is returned unchanged (= Buah).
+     */
+    private function normalizeUnit(string $unit, Product $product): string
+    {
+        $lower = strtolower(trim($unit));
+        if ($lower === '') {
+            return strtolower((string) ($product->sale_unit ?: 'buah'));
+        }
+        $lower = self::UNIT_ALIASES[$lower] ?? $lower;
+
+        $known = array_values(array_unique(array_filter(array_merge(
+            array_keys(UnitConverter::UNIT_TO_BASE),
+            ['goni', 'dus', 'karton'],
+            [strtolower((string) $product->sale_unit), strtolower((string) $product->purchase_unit)],
+        ))));
+        if (in_array($lower, $known, true)) {
+            return $lower;
+        }
+
+        $maxDistance = mb_strlen($lower) <= 5 ? 1 : 2;
+        $closest = collect($known)
+            ->map(fn ($candidate) => ['unit' => $candidate, 'distance' => levenshtein($lower, $candidate)])
+            ->filter(fn ($c) => $c['distance'] <= $maxDistance)
+            ->sortBy('distance')
+            ->values();
+
+        // Two equally close units (ambiguous typo) — don't guess.
+        if ($closest->isEmpty() || ($closest->count() > 1 && $closest[0]['distance'] === $closest[1]['distance'])) {
+            return $lower;
+        }
+
+        return $closest[0]['unit'];
     }
 
     // ─── Cart helper ──────────────────────────────────────────────────────────
@@ -1342,6 +1434,7 @@ Balas dalam format JSON:
      */
     private function stockShortfallMessage(array $cart, Product $product, float $qty, string $unit, bool $replace): ?string
     {
+        $unit = $this->normalizeUnit($unit, $product);
         $existing = collect($cart)->firstWhere('product_id', $product->id);
         $existingBase = $existing && ! $replace
             ? UnitConverter::toBaseUnit((float) $existing['qty'], (string) $existing['unit'], $product)
@@ -1351,10 +1444,100 @@ Balas dalam format JSON:
             return null;
         }
 
-        $requested = (fmod($qty, 1) === 0.0) ? (int) $qty : $qty;
+        $this->refusedProductIds[] = $product->id;
 
-        return "⚠️ Maaf, stok *{$product->product_name}* hanya {$product->stock_for_customer}, jadi {$requested} ".ucfirst(strtolower($unit))
-             .' belum bisa ditambahkan. Silakan kirim jumlah yang lebih kecil (maksimal sesuai stok tersebut).';
+        $message = "⚠️ Maaf, stok *{$product->product_name}* hanya {$product->stock_for_customer}, jadi "
+                 .$this->formatQtyUnit($qty, $unit).' belum bisa ditambahkan.';
+
+        if ($existingBase > 0) {
+            $message .= ' Di keranjang sudah ada '.$this->formatQtyUnit((float) $existing['qty'], (string) $existing['unit']).'.';
+        }
+
+        // Offer the whole available stock as the line's quantity — a bare
+        // "30 lusin" reply sets the cart line to that amount.
+        $offer = $this->maxOrderableQty($product);
+        if ($offer !== null) {
+            $message .= "\nMau pesan {$offer} saja? Balas *".strtolower($offer).'* untuk memesan sejumlah stok yang ada.';
+        }
+
+        return $message;
+    }
+
+    /**
+     * One line per cart product whose total quantity (all its lines, in
+     * Buah) is above its current stock; empty when the whole cart fits.
+     *
+     * @param  list<array<string, mixed>>  $cart
+     * @return list<string>
+     */
+    private function cartStockProblems(array $cart): array
+    {
+        $problems = [];
+
+        foreach (collect($cart)->groupBy('product_id') as $productId => $lines) {
+            $product = Product::find($productId);
+            $name = $product?->product_name ?? (string) $lines->first()['product_name'];
+
+            if (! $product) {
+                $problems[] = "• *{$name}*: produk sudah tidak tersedia.";
+
+                continue;
+            }
+
+            $requestedBase = $lines->sum(fn ($line) => UnitConverter::toBaseUnit((float) $line['qty'], (string) $line['unit'], $product));
+            if ($requestedBase <= (float) $product->stock) {
+                continue;
+            }
+
+            $this->refusedProductIds[] = $product->id;
+            $ordered = $lines->map(fn ($line) => $this->formatQtyUnit((float) $line['qty'], (string) $line['unit']))->join(' + ');
+            $offer = $this->maxOrderableQty($product);
+            $this->lastOfferedQty = $offer ?? $this->lastOfferedQty;
+
+            $problems[] = "• *{$name}*: dipesan {$ordered}, stok hanya {$product->stock_for_customer}"
+                        .($offer !== null ? " (maksimal {$offer})." : ' (stok habis).');
+        }
+
+        return $problems;
+    }
+
+    /**
+     * After a stock refusal, the refused product(s) become the "last shown"
+     * ones, so replying with just the offered quantity orders them.
+     */
+    private function rememberRefusedProducts(WhatsAppSession $session): void
+    {
+        if ($this->refusedProductIds !== []) {
+            $session->last_shown_products = array_values(array_unique($this->refusedProductIds));
+        }
+    }
+
+    /**
+     * The whole stock as an order quantity: whole sale units when there is
+     * at least one ("30 Lusin"), otherwise the loose pieces ("10 buah").
+     */
+    private function maxOrderableQty(Product $product): ?string
+    {
+        $stock = (float) $product->stock;
+        $factor = UnitConverter::toBaseUnit(1, (string) ($product->sale_unit ?: 'Buah'), $product);
+
+        if ($stock <= 0 || $factor <= 0) {
+            return null;
+        }
+
+        $wholeUnits = floor(round($stock / $factor, 6));
+        if ($wholeUnits >= 1) {
+            return $this->formatQtyUnit($wholeUnits, (string) ($product->sale_unit ?: 'Buah'));
+        }
+
+        return $this->formatQtyUnit($stock, 'buah');
+    }
+
+    private function formatQtyUnit(float $qty, string $unit): string
+    {
+        $qtyText = fmod($qty, 1) === 0.0 ? (string) (int) $qty : str_replace('.', ',', rtrim(rtrim(number_format($qty, 2, '.', ''), '0'), '.'));
+
+        return $qtyText.' '.ucfirst(strtolower($unit));
     }
 
     private function formatCartSummary(array $cart): string

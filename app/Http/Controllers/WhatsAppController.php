@@ -73,6 +73,16 @@ class WhatsAppController extends Controller
     private const ORDER_VERBS = ['pesan', 'mau', 'beli', 'order', 'ambil', 'tambah'];
 
     /**
+     * Casual filler words — never (part of) a product name or a quantity.
+     * Matched as whole words, case-insensitive. Order verbs ("mau") are in
+     * ORDER_VERBS and treated the same way.
+     */
+    private const FILLER_WORDS = [
+        'aj', 'aja', 'aje', 'saja', 'sj', 'ya', 'yaa', 'yah', 'dong', 'deh', 'lah', 'kok', 'nih', 'tuh', 'sih',
+        'minta', 'tolong', 'kak', 'kakak', 'gan', 'bos', 'yg', 'yang',
+    ];
+
+    /**
      * Units recognized in a quantity-only reply such as "2 lusin".
      *
      * @var list<string>
@@ -300,7 +310,7 @@ class WhatsAppController extends Controller
                 } else {
                     // Stage 2: search DB with extracted keywords (order verbs
                     // like "pesan"/"mau" are never product keywords)
-                    $keywords = array_values(array_filter(array_map(fn ($kw) => $this->stripOrderVerbs((string) $kw), $keywords)));
+                    $keywords = array_values(array_filter(array_map(fn ($kw) => $this->stripFillerWords((string) $kw), $keywords)));
                     $matchedProducts = $this->searchByKeywords($keywords);
 
                     // Stage 3: GPT generates reply using only the relevant product subset
@@ -310,7 +320,7 @@ class WhatsAppController extends Controller
                     $cartAdded = [];
                     $cartProblems = [];
                     foreach ($cartAdd as $item) {
-                        $cartAddName = $this->stripOrderVerbs((string) ($item['product_name'] ?? ''));
+                        $cartAddName = $this->stripFillerWords((string) ($item['product_name'] ?? ''));
                         if ($cartAddName === '') {
                             continue;
                         }
@@ -543,21 +553,29 @@ class WhatsAppController extends Controller
     }
 
     /**
-     * "2 lusin", "pesan 2 lusin", "mau 3 buah", "ambil 1,5 lusin aja" →
-     * ['qty' => 2.0, 'unit' => 'lusin']; null for anything else.
+     * A message that is only a quantity + unit, with any order verbs and
+     * filler words around it: "2 lusin", "pesan 2 lusin", "20 lusin aj",
+     * "yg 20 lusin dong", "aj 20 lsn" → ['qty' => 20.0, 'unit' => 'lusin'];
+     * null for anything else.
      *
      * @return array{qty: float, unit: string}|null
      */
     private function parseQuantityOnly(string $body): ?array
     {
-        $pattern = '/^(?:(?:'.implode('|', self::ORDER_VERBS).')\s+)?(\d+(?:[.,]\d+)?)\s*('.implode('|', self::QUANTITY_UNITS).')'
-                  .'(?:\s+(?:saja|aja|ya|kak|dong|deh))*\s*[.!]*$/iu';
+        $text = (string) preg_replace('/[.!?]+$/u', '', mb_strtolower(trim($body)));
+        $ignored = array_merge(self::FILLER_WORDS, self::ORDER_VERBS);
+        $words = array_filter(preg_split('/\s+/u', $text) ?: [], fn ($w) => $w !== '' && ! in_array($w, $ignored, true));
 
-        if (! preg_match($pattern, trim($body), $m)) {
+        if (! preg_match('/^(\d+(?:[.,]\d+)?)\s*(\p{L}+)$/u', implode(' ', $words), $m)) {
             return null;
         }
 
-        return ['qty' => (float) str_replace(',', '.', $m[1]), 'unit' => strtolower($m[2])];
+        $unit = $this->normalizeUnit($m[2]);
+        if (! in_array($unit, self::QUANTITY_UNITS, true)) {
+            return null;
+        }
+
+        return ['qty' => (float) str_replace(',', '.', $m[1]), 'unit' => $unit];
     }
 
     /**
@@ -576,11 +594,12 @@ class WhatsAppController extends Controller
             return $this->handleBulkOrder([['item' => $products->first()->product_name, 'qty' => $qty, 'unit' => $unit]], $session);
         }
 
+        $displayQty = (fmod($qty, 1) === 0.0) ? (int) $qty : $qty;
+
         if ($products->isEmpty()) {
-            return [self::HOW_TO_ORDER_REPLY, collect()];
+            return ["Produk apa yang dimaksud untuk {$displayQty} ".ucfirst($unit)."?\n".self::HOW_TO_ORDER_REPLY, collect()];
         }
 
-        $displayQty = (fmod($qty, 1) === 0.0) ? (int) $qty : $qty;
         $session->pending_clarification = [[
             'original' => "{$displayQty} {$unit}",
             'options' => $products->map(fn ($p) => ['id' => $p->id, 'name' => $p->product_name])->all(),
@@ -594,9 +613,26 @@ class WhatsAppController extends Controller
         return ["Produk yang mana untuk {$displayQty} ".ucfirst($unit)."?\n{$options}\n\nBalas dengan nomornya (contoh: *1*).", collect()];
     }
 
-    private function stripOrderVerbs(string $name): string
+    /**
+     * Product-name candidate without the order verbs / filler words around
+     * it: "tolong pesan kotak trisula 900 aja" → "kotak trisula 900",
+     * "aj" → "". Only leading/trailing words are removed, so a product whose
+     * name merely contains such a word in the middle is left intact.
+     */
+    private function stripFillerWords(string $name): string
     {
-        return trim((string) preg_replace('/^(?:(?:'.implode('|', self::ORDER_VERBS).')\b\s*)+/iu', '', trim($name)));
+        $words = preg_split('/\s+/u', trim($name)) ?: [];
+        $isFiller = fn (string $w) => in_array(mb_strtolower(trim($w, '.,!?')), self::FILLER_WORDS, true);
+        $isLeading = fn (string $w) => $isFiller($w) || in_array(mb_strtolower(trim($w, '.,!?')), self::ORDER_VERBS, true);
+
+        while ($words !== [] && $isLeading($words[0])) {
+            array_shift($words);
+        }
+        while ($words !== [] && $isFiller(end($words))) {
+            array_pop($words);
+        }
+
+        return trim(implode(' ', $words));
     }
 
     /**
@@ -703,7 +739,8 @@ Panduan mode:
 - Contoh BENAR: "3 lusin" → {"qty": 3, "unit": "lusin"}
 - Contoh SALAH: "3 lusin" → {"qty": 36, "unit": "buah"} ← DILARANG
 - unit default "buah" jika tidak disebutkan sama sekali.
-- Kata kerja seperti "pesan", "mau", "beli", "order", "ambil" BUKAN nama produk — jangan masukkan ke item maupun keywords.',
+- Kata kerja seperti "pesan", "mau", "beli", "order", "ambil" BUKAN nama produk — jangan masukkan ke item maupun keywords.
+- Kata pengisi santai seperti "aj", "aja", "saja", "sj", "ya", "dong", "deh", "lah", "nih", "sih", "kak", "gan", "bos", "yg", "tolong", "minta" BUKAN nama produk. Jika pesan hanya berisi jumlah + satuan (contoh: "20 lusin aj"), isi item dengan "" (kosong).',
                 ],
                 ['role' => 'user', 'content' => $body],
             ],
@@ -965,7 +1002,7 @@ Balas dalam format JSON:
         $lowerBody = strtolower(trim($body));
 
         // Ignore pure stop-words so "yang kecil" → keywords = ["kecil"]
-        $stopWords = ['yang', 'mau', 'itu', 'ini', 'saja', 'deh', 'dong', 'kak', 'pak', 'bu'];
+        $stopWords = array_merge(['itu', 'ini', 'pak', 'bu'], self::FILLER_WORDS, self::ORDER_VERBS);
         $keywords = array_values(array_filter(
             explode(' ', preg_replace('/[^a-zA-Z0-9\s]/u', ' ', $lowerBody)),
             fn ($w) => mb_strlen($w) >= 3 && ! in_array($w, $stopWords)
@@ -1093,13 +1130,18 @@ Balas dalam format JSON:
         $ambiguous = [];
 
         $pending = [];
+        $nameless = [];
 
         foreach ($bulkItems as $item) {
-            // "pesan"/"mau"/"beli" is never (part of) a product name.
-            $name = $this->stripOrderVerbs((string) ($item['item'] ?? ''));
+            // "pesan"/"mau"/"aj"/"dong" are never (part of) a product name.
+            $name = $this->stripFillerWords((string) ($item['item'] ?? ''));
             $qty = (float) ($item['qty'] ?? 1);
             $unit = $item['unit'] ?? 'buah';
             if ($name === '') {
+                if (isset($item['qty'])) {
+                    $nameless[] = ['qty' => $qty, 'unit' => $this->normalizeUnit((string) $unit)];
+                }
+
                 continue;
             }
 
@@ -1175,6 +1217,13 @@ Balas dalam format JSON:
         // Every item was just an order verb (e.g. GPT returned "pesan") —
         // explain how to order instead of an empty recap, session untouched.
         if (empty($matched) && empty($ambiguous) && empty($notFound) && empty($stockIssues)) {
+            // Only a quantity was left (e.g. GPT extracted item "aj" from
+            // "20 lusin aj") → same as a quantity-only reply: the product
+            // last shown/refused, or ask which product.
+            if (count($nameless) === 1) {
+                return $this->handleQuantityOnly($nameless[0]['qty'], $nameless[0]['unit'], $session);
+            }
+
             return [self::HOW_TO_ORDER_REPLY, collect()];
         }
 
@@ -1360,19 +1409,20 @@ Balas dalam format JSON:
      * like "40 lisin" was checked against stock as 40 Buah. Abbreviations
      * and near-misses (1 typo for short words, 2 for longer) map to the
      * closest known unit; anything else is returned unchanged (= Buah).
+     * Without a product (a bare "20 lsn" reply) only the standard units count.
      */
-    private function normalizeUnit(string $unit, Product $product): string
+    private function normalizeUnit(string $unit, ?Product $product = null): string
     {
         $lower = strtolower(trim($unit));
         if ($lower === '') {
-            return strtolower((string) ($product->sale_unit ?: 'buah'));
+            return strtolower((string) ($product?->sale_unit ?: 'buah'));
         }
         $lower = self::UNIT_ALIASES[$lower] ?? $lower;
 
         $known = array_values(array_unique(array_filter(array_merge(
             array_keys(UnitConverter::UNIT_TO_BASE),
             ['goni', 'dus', 'karton'],
-            [strtolower((string) $product->sale_unit), strtolower((string) $product->purchase_unit)],
+            [strtolower((string) $product?->sale_unit), strtolower((string) $product?->purchase_unit)],
         ))));
         if (in_array($lower, $known, true)) {
             return $lower;

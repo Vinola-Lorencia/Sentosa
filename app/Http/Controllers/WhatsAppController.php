@@ -356,7 +356,7 @@ class WhatsAppController extends Controller
 
                 $caption = "📦 *{$product->product_name}*\n"
                          .'💰 Rp'.number_format($product->sale_price, 0, ',', '.')."/{$product->sale_unit}\n"
-                         ."📦 Stok: {$product->stock} {$product->sale_unit}";
+                         ."📦 Stok: {$product->stock_for_customer}";
 
                 if ($isLocalhost && ! $product->image_path) {
                     // Twilio cannot fetch localhost URLs — send text-only with a note
@@ -754,6 +754,7 @@ Keranjang saat ini:
 
 Panduan:
 - Gunakan HANYA harga dan stok dari daftar produk di atas, bukan dari riwayat percakapan.
+- Stok di daftar sudah dalam satuan jual produk. Tulis persis seperti tertulis (contoh: \"30 Lusin\" atau \"2 Lusin + 6 buah\"), jangan dihitung ulang, jangan ditambah desimal, dan jangan diganti satuannya.
 - Cocokkan nama produk yang mirip jika tidak ada yang persis sama.
 - Jika pembeli mau memesan, tambahkan ke cart_add.
 - Jika pelanggan menggunakan kata 'tambah', 'pesan', 'mau', 'beli', 'order' diikuti nama produk dan jumlah, langsung tambahkan ke cart_add TANPA tanya konfirmasi lagi.
@@ -851,7 +852,7 @@ Balas dalam format JSON:
 
     private function formatProductLine(Product $product): string
     {
-        return "{$product->product_name} - Rp".number_format($product->sale_price, 0, ',', '.')."/{$product->sale_unit} (stok: {$product->stock})";
+        return "{$product->product_name} - Rp".number_format($product->sale_price, 0, ',', '.')."/{$product->sale_unit} (stok: {$product->stock_for_customer})";
     }
 
     // ─── Product search with fuzzy word-split fallback ───────────────────────
@@ -1352,7 +1353,7 @@ Balas dalam format JSON:
 
         $requested = (fmod($qty, 1) === 0.0) ? (int) $qty : $qty;
 
-        return "⚠️ Maaf, stok *{$product->product_name}* hanya {$product->stok_display}, jadi {$requested} ".ucfirst(strtolower($unit))
+        return "⚠️ Maaf, stok *{$product->product_name}* hanya {$product->stock_for_customer}, jadi {$requested} ".ucfirst(strtolower($unit))
              .' belum bisa ditambahkan. Silakan kirim jumlah yang lebih kecil (maksimal sesuai stok tersebut).';
     }
 

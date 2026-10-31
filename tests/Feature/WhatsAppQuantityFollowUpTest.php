@@ -261,7 +261,7 @@ class WhatsAppQuantityFollowUpTest extends TestCase
         $this->send('pesan 2 lusin');
 
         $this->assertSame([], $this->currentSession()->cart);
-        $this->assertStringContainsString('stok *TOPLES JUMBO SEALWARE 25 KG* hanya 0 Lusin + 10 buah (10 buah total)', $this->lastReply());
+        $this->assertStringContainsString('stok *TOPLES JUMBO SEALWARE 25 KG* hanya 10 buah', $this->lastReply());
     }
 
     public function test_name_only_inside_a_longer_listed_name_is_not_counted_as_shown(): void

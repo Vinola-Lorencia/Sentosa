@@ -216,7 +216,7 @@ class WhatsAppUatScenarioTest extends TestCase
         });
         $stage2Prompt = $prompts[1] ?? '';
 
-        if (! str_contains($stage2Prompt, 'KURSI SANTAI NO.10 - Rp85.000/Buah (stok: 7)')) {
+        if (! str_contains($stage2Prompt, 'KURSI SANTAI NO.10 - Rp85.000/Buah (stok: 7 Buah)')) {
             $problems[] = 'Prompt tahap 2 tidak memuat harga/stok KURSI SANTAI NO.10 dari database';
         }
         if (str_contains($stage2Prompt, 'EMBER 10L')) {
@@ -224,7 +224,7 @@ class WhatsAppUatScenarioTest extends TestCase
         }
 
         $reply = $this->lastReply();
-        if (! str_contains($reply, '- KURSI SANTAI NO.10 - Rp85.000/Buah (stok: 7)')) {
+        if (! str_contains($reply, '- KURSI SANTAI NO.10 - Rp85.000/Buah (stok: 7 Buah)')) {
             $problems[] = "Balasan ke pelanggan tidak memuat harga & stok yang benar. Balasan: {$reply}";
         }
 

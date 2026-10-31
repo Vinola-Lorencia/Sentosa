@@ -98,8 +98,8 @@ class WhatsAppChatProductListFallbackTest extends TestCase
 
         $this->assertSame(
             "Berikut adalah daftar kobokan yang tersedia:\n\n"
-            ."- KOBOKAN 03 - Rp15.000/Lusin (stok: 770)\n"
-            .'- KOBOKAN 013 - Rp1.250.000/Lusin (stok: 5)',
+            ."- KOBOKAN 03 - Rp15.000/Lusin (stok: 64 Lusin + 2 buah)\n"
+            .'- KOBOKAN 013 - Rp1.250.000/Lusin (stok: 5 buah)',
             $reply
         );
 
@@ -132,7 +132,7 @@ class WhatsAppChatProductListFallbackTest extends TestCase
         $this->assertSame('', $lines[1]);
         $productLines = array_values(array_filter($lines, fn ($line) => str_starts_with($line, '- BASKOM')));
         $this->assertCount(10, $productLines);
-        $this->assertSame('- BASKOM 01 - Rp15.000/Lusin (stok: 770)', $productLines[0]);
+        $this->assertSame('- BASKOM 01 - Rp15.000/Lusin (stok: 64 Lusin + 2 buah)', $productLines[0]);
         $this->assertStringNotContainsString('BASKOM 11', $reply);
         $this->assertSame('Ketik nama produk untuk info lebih detail.', end($lines));
     }

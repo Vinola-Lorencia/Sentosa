@@ -110,23 +110,23 @@ class Product extends Model
      */
     public function getStokDisplayAttribute(): string
     {
-        $stock    = (float) $this->stock;
+        $stock = (float) $this->stock;
         $saleUnit = (string) ($this->sale_unit ?: 'Buah');
-        $factor   = UnitConverter::UNIT_TO_BASE[strtolower(trim($saleUnit))] ?? null;
+        $factor = UnitConverter::UNIT_TO_BASE[strtolower(trim($saleUnit))] ?? null;
 
         // Unrecognized unit — no safe conversion factor, show raw stock
         // under its own (actual) unit name rather than mislabeling it.
         if ($factor === null) {
-            return $this->formatQty($stock) . ' ' . $saleUnit;
+            return $this->formatQty($stock).' '.$saleUnit;
         }
 
         // Already the base unit (Buah/Pcs/Biji, factor 1) — nothing to convert.
         if ($factor <= 1) {
-            return $this->formatQty($stock) . ' Buah';
+            return $this->formatQty($stock).' Buah';
         }
 
         $wholeUnits = floor($stock / $factor);
-        $remainder  = round($stock - ($wholeUnits * $factor), 2);
+        $remainder = round($stock - ($wholeUnits * $factor), 2);
 
         // Rounding the remainder can occasionally push it up to a full
         // $factor (float noise near a boundary, e.g. 23.999999998 -> 24.00
@@ -141,7 +141,39 @@ class Product extends Model
         }
 
         return "{$this->formatQty($wholeUnits)} {$saleUnit} + {$this->formatQty($remainder)} buah "
-             . "({$this->formatQty($stock)} buah total)";
+             ."({$this->formatQty($stock)} buah total)";
+    }
+
+    /**
+     * Stock as a customer reads it, in the product's own sale unit:
+     * "30 Lusin", "2 Lusin + 6 buah", "10 buah" (less than one sale unit),
+     * "15 Buah". Uses the same factor UnitConverter applies when an order is
+     * checked against stock, so what the chatbot shows is exactly what can
+     * be ordered — including Dus/Goni/Karton sale units via dus_to_unit.
+     */
+    public function getStockForCustomerAttribute(): string
+    {
+        $stock = max(0.0, (float) $this->stock);
+        $saleUnit = (string) ($this->sale_unit ?: 'Buah');
+        $factor = UnitConverter::toBaseUnit(1, $saleUnit, $this);
+
+        if ($factor <= 1) {
+            return $this->formatQty($stock).' '.$saleUnit;
+        }
+
+        // round() first so float noise (359.9999…/12) doesn't drop a unit.
+        $wholeUnits = floor(round($stock / $factor, 6));
+        $remainder = round($stock - ($wholeUnits * $factor), 2);
+
+        if ($remainder <= 0) {
+            return $this->formatQty($wholeUnits).' '.$saleUnit;
+        }
+
+        if ($wholeUnits == 0) {
+            return $this->formatQty($remainder).' buah';
+        }
+
+        return "{$this->formatQty($wholeUnits)} {$saleUnit} + {$this->formatQty($remainder)} buah";
     }
 
     private function formatQty(float $qty): string

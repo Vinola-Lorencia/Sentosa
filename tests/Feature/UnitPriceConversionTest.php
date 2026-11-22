@@ -24,6 +24,7 @@ class UnitPriceConversionTest extends TestCase
     use RefreshDatabase;
 
     private User $pembeli;
+
     private Product $product;
 
     protected function setUp(): void
@@ -32,23 +33,23 @@ class UnitPriceConversionTest extends TestCase
 
         $role = Role::create(['role_name' => 'Pembeli']);
         $this->pembeli = User::create([
-            'name'     => 'Pembeli Test',
-            'email'    => 'pembeli@test.com',
+            'name' => 'Pembeli Test',
+            'email' => 'pembeli@test.com',
             'password' => bcrypt('password'),
-            'role_id'  => $role->id,
+            'role_id' => $role->id,
         ]);
 
         // Priced per Lusin (12 buah) — Rp 120.000 / Lusin = Rp 10.000 / Buah.
         $this->product = Product::create([
-            'product_name'         => 'Kursi Lipat Konversi',
-            'brand'                => 'Brand Test',
-            'default_buy_price'    => 80000,
+            'product_name' => 'Kursi Lipat Konversi',
+            'brand' => 'Brand Test',
+            'default_buy_price' => 80000,
             'default_buy_discount' => 0,
-            'sale_price'           => 120000,
-            'sale_unit'            => 'Lusin',
-            'purchase_unit'        => 'Dus',
-            'dus_to_unit'          => 12,
-            'stock'                => 144, // 12 Lusin worth, plenty for either scenario
+            'sale_price' => 120000,
+            'sale_unit' => 'Lusin',
+            'purchase_unit' => 'Dus',
+            'dus_to_unit' => 12,
+            'stock' => 144, // 12 Lusin worth, plenty for either scenario
         ]);
     }
 
@@ -64,8 +65,8 @@ class UnitPriceConversionTest extends TestCase
     {
         $response = $this->actingAs($this->pembeli)->post(route('toko.keranjang.tambah'), [
             'product_id' => $this->product->id,
-            'quantity'   => 1,
-            'unit'       => 'Lusin',
+            'quantity' => 1,
+            'unit' => 'Lusin',
         ]);
 
         $response->assertRedirect();
@@ -82,8 +83,8 @@ class UnitPriceConversionTest extends TestCase
     {
         $response = $this->actingAs($this->pembeli)->post(route('toko.keranjang.tambah'), [
             'product_id' => $this->product->id,
-            'quantity'   => 12,
-            'unit'       => 'Buah',
+            'quantity' => 12,
+            'unit' => 'Buah',
         ]);
 
         $response->assertRedirect();
@@ -98,8 +99,8 @@ class UnitPriceConversionTest extends TestCase
         // Same total value of goods, regardless of which unit was used to buy it.
         $lusinResponse = $this->actingAs($this->pembeli)->post(route('toko.keranjang.tambah'), [
             'product_id' => $this->product->id,
-            'quantity'   => 1,
-            'unit'       => 'Lusin',
+            'quantity' => 1,
+            'unit' => 'Lusin',
         ]);
         $lusinResponse->assertRedirect();
 
@@ -113,8 +114,8 @@ class UnitPriceConversionTest extends TestCase
         // 120000 * (20/12) = 200000.
         $response = $this->actingAs($this->pembeli)->post(route('toko.keranjang.tambah'), [
             'product_id' => $this->product->id,
-            'quantity'   => 1,
-            'unit'       => 'Kodi',
+            'quantity' => 1,
+            'unit' => 'Kodi',
         ]);
 
         $response->assertRedirect();
@@ -129,8 +130,8 @@ class UnitPriceConversionTest extends TestCase
     {
         $this->actingAs($this->pembeli)->post(route('toko.keranjang.tambah'), [
             'product_id' => $this->product->id,
-            'quantity'   => 1,
-            'unit'       => 'Lusin',
+            'quantity' => 1,
+            'unit' => 'Lusin',
         ]);
 
         $response = $this->actingAs($this->pembeli)->post(route('toko.checkout.proses'), [
@@ -146,8 +147,9 @@ class UnitPriceConversionTest extends TestCase
         $this->assertEquals(120000, (float) $detail->price);
         $this->assertEquals(120000, (float) $detail->subtotal);
 
-        // Stock deducted in true base units: 1 Lusin = 12 Buah.
-        $this->assertEquals(144 - 12, (float) $this->product->fresh()->stock);
+        // Stock is untouched at checkout — it's only deducted when the
+        // owner clicks "Proses" (SaleController::tandaiDiproses).
+        $this->assertEquals(144, (float) $this->product->fresh()->stock);
 
         // Cart cleared from the database after a successful checkout.
         $this->assertDatabaseCount('cart_items', 0);
@@ -173,20 +175,20 @@ class UnitPriceConversionTest extends TestCase
     {
         // Rp 100.000 / Lusin -> Rp 8.333,33 / Buah -> rounded UP to Rp 9.000.
         $product = Product::create([
-            'product_name'         => 'Produk Harga Ganjil',
-            'sale_price'           => 100000,
-            'sale_unit'            => 'Lusin',
-            'purchase_unit'        => 'Dus',
-            'dus_to_unit'          => 12,
-            'stock'                => 100,
-            'default_buy_price'    => 60000,
+            'product_name' => 'Produk Harga Ganjil',
+            'sale_price' => 100000,
+            'sale_unit' => 'Lusin',
+            'purchase_unit' => 'Dus',
+            'dus_to_unit' => 12,
+            'stock' => 100,
+            'default_buy_price' => 60000,
             'default_buy_discount' => 0,
         ]);
 
         $response = $this->actingAs($this->pembeli)->post(route('toko.keranjang.tambah'), [
             'product_id' => $product->id,
-            'quantity'   => 1,
-            'unit'       => 'Buah',
+            'quantity' => 1,
+            'unit' => 'Buah',
         ]);
 
         $response->assertRedirect();
@@ -206,20 +208,20 @@ class UnitPriceConversionTest extends TestCase
         // is rounded BEFORE multiplying: price/unit = ceil(8333.33) = 9000,
         // so 3 Buah must cost 3 x 9000 = 27000, not ceil(3 x 8333.33) = 25000.
         $product = Product::create([
-            'product_name'         => 'Produk Urutan Pembulatan',
-            'sale_price'           => 100000,
-            'sale_unit'            => 'Lusin',
-            'purchase_unit'        => 'Dus',
-            'dus_to_unit'          => 12,
-            'stock'                => 100,
-            'default_buy_price'    => 60000,
+            'product_name' => 'Produk Urutan Pembulatan',
+            'sale_price' => 100000,
+            'sale_unit' => 'Lusin',
+            'purchase_unit' => 'Dus',
+            'dus_to_unit' => 12,
+            'stock' => 100,
+            'default_buy_price' => 60000,
             'default_buy_discount' => 0,
         ]);
 
         $response = $this->actingAs($this->pembeli)->post(route('toko.keranjang.tambah'), [
             'product_id' => $product->id,
-            'quantity'   => 3,
-            'unit'       => 'Buah',
+            'quantity' => 3,
+            'unit' => 'Buah',
         ]);
 
         $response->assertRedirect();
@@ -233,20 +235,20 @@ class UnitPriceConversionTest extends TestCase
     public function test_choosing_the_products_own_sale_unit_never_rounds_a_non_round_price()
     {
         $product = Product::create([
-            'product_name'         => 'Produk Harga Asli',
-            'sale_price'           => 15750, // deliberately not a multiple of 1.000
-            'sale_unit'            => 'Lusin',
-            'purchase_unit'        => 'Dus',
-            'dus_to_unit'          => 12,
-            'stock'                => 100,
-            'default_buy_price'    => 10000,
+            'product_name' => 'Produk Harga Asli',
+            'sale_price' => 15750, // deliberately not a multiple of 1.000
+            'sale_unit' => 'Lusin',
+            'purchase_unit' => 'Dus',
+            'dus_to_unit' => 12,
+            'stock' => 100,
+            'default_buy_price' => 10000,
             'default_buy_discount' => 0,
         ]);
 
         $response = $this->actingAs($this->pembeli)->post(route('toko.keranjang.tambah'), [
             'product_id' => $product->id,
-            'quantity'   => 1,
-            'unit'       => 'Lusin', // same as sale_unit — ratio 1:1, no real division
+            'quantity' => 1,
+            'unit' => 'Lusin', // same as sale_unit — ratio 1:1, no real division
         ]);
 
         $response->assertRedirect();
@@ -259,20 +261,20 @@ class UnitPriceConversionTest extends TestCase
     public function test_rounded_price_carries_through_checkout_into_sale_detail()
     {
         $product = Product::create([
-            'product_name'         => 'Produk Struk Bulat',
-            'sale_price'           => 100000,
-            'sale_unit'            => 'Lusin',
-            'purchase_unit'        => 'Dus',
-            'dus_to_unit'          => 12,
-            'stock'                => 100,
-            'default_buy_price'    => 60000,
+            'product_name' => 'Produk Struk Bulat',
+            'sale_price' => 100000,
+            'sale_unit' => 'Lusin',
+            'purchase_unit' => 'Dus',
+            'dus_to_unit' => 12,
+            'stock' => 100,
+            'default_buy_price' => 60000,
             'default_buy_discount' => 0,
         ]);
 
         $this->actingAs($this->pembeli)->post(route('toko.keranjang.tambah'), [
             'product_id' => $product->id,
-            'quantity'   => 1,
-            'unit'       => 'Buah',
+            'quantity' => 1,
+            'unit' => 'Buah',
         ]);
 
         $response = $this->actingAs($this->pembeli)->post(route('toko.checkout.proses'), [

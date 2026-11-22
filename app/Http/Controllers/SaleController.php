@@ -312,8 +312,13 @@ class SaleController extends Controller
         try {
             DB::transaction(function () use ($request, $sale) {
 
+                // Pesanan online/WhatsApp yang belum diproses (is_new) belum
+                // pernah memotong stok, jadi tidak ada yang dikembalikan dan
+                // stok baru juga belum dipotong — itu tugas tandaiDiproses().
+                $stockDeducted = ! $sale->is_new;
+
                 // Kembalikan stok lama (dikonversi ke sale_unit)
-                foreach ($sale->details as $oldDetail) {
+                foreach ($stockDeducted ? $sale->details : [] as $oldDetail) {
                     $product = Product::findOrFail($oldDetail->product_id);
                     $baseQty = UnitConverter::toBaseUnit((float) $oldDetail->quantity, $oldDetail->unit ?? '', $product);
                     $product->stock += $baseQty;
@@ -356,10 +361,12 @@ class SaleController extends Controller
                     $detail->subtotal = $subtotal;
                     $detail->save();
 
-                    $product = Product::findOrFail($productId);
-                    $baseQty = UnitConverter::toBaseUnit((float) $qty, $units[$i] ?? '', $product);
-                    $product->stock -= $baseQty;
-                    $product->save();
+                    if ($stockDeducted) {
+                        $product = Product::findOrFail($productId);
+                        $baseQty = UnitConverter::toBaseUnit((float) $qty, $units[$i] ?? '', $product);
+                        $product->stock -= $baseQty;
+                        $product->save();
+                    }
                 }
 
                 // Update header
@@ -405,8 +412,9 @@ class SaleController extends Controller
         $sale = Sale::with('details', 'receivable')->findOrFail($id);
 
         DB::transaction(function () use ($sale) {
-            // Kembalikan stok (dikonversi ke sale_unit)
-            foreach ($sale->details as $detail) {
+            // Kembalikan stok (dikonversi ke sale_unit). Pesanan online/WhatsApp
+            // yang belum diproses (is_new) belum memotong stok, jadi dilewati.
+            foreach ($sale->is_new ? [] : $sale->details as $detail) {
                 $product = Product::findOrFail($detail->product_id);
                 $baseQty = UnitConverter::toBaseUnit((float) $detail->quantity, $detail->unit ?? '', $product);
                 $product->stock += $baseQty;
@@ -429,12 +437,22 @@ class SaleController extends Controller
 
     public function tandaiDiproses(string $id)
     {
-        $sale = Sale::with('details')->findOrFail($id);
+        $sale = Sale::findOrFail($id);
+        $invoice = 'INV-'.str_pad($sale->sale_id, 3, '0', STR_PAD_LEFT);
 
         try {
-            DB::transaction(function () use ($sale) {
+            $alreadyProcessed = DB::transaction(function () use ($id) {
+                // Kunci baris pesanan dan cek ulang is_new di dalam transaksi,
+                // supaya klik Proses dua kali (dobel klik / tab lama) tidak
+                // memotong stok dua kali.
+                $sale = Sale::with('details')->lockForUpdate()->findOrFail($id);
+
+                if (! $sale->is_new) {
+                    return true;
+                }
+
                 foreach ($sale->details as $detail) {
-                    $product = Product::findOrFail($detail->product_id);
+                    $product = Product::lockForUpdate()->findOrFail($detail->product_id);
                     $baseQty = UnitConverter::toBaseUnit((float) $detail->quantity, $detail->unit ?? '', $product);
 
                     if ($product->stock < $baseQty) {
@@ -447,6 +465,8 @@ class SaleController extends Controller
 
                 $sale->is_new = false;
                 $sale->save();
+
+                return false;
             });
         } catch (\Exception $e) {
             return redirect()
@@ -454,8 +474,14 @@ class SaleController extends Controller
                 ->with('error', $e->getMessage());
         }
 
+        if ($alreadyProcessed) {
+            return redirect()
+                ->route('dashboard')
+                ->with('error', "Pesanan {$invoice} sudah diproses sebelumnya. Stok tidak dikurangi lagi.");
+        }
+
         return redirect()
             ->route('dashboard')
-            ->with('success', 'Pesanan INV-'.str_pad($sale->sale_id, 3, '0', STR_PAD_LEFT).' ditandai sudah diproses.');
+            ->with('success', "Pesanan {$invoice} ditandai sudah diproses.");
     }
 }

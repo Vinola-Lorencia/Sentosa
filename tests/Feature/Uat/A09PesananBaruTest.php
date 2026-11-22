@@ -66,7 +66,7 @@ class A09PesananBaruTest extends OwnerUatTestCase
         $afterProses = (float) $product->fresh()->stock;
 
         $this->assertFalse((bool) $sale->fresh()->is_new);
-        $this->assertSame(90.0, $afterCheckout, 'Stok setelah checkout');
+        $this->assertSame(100.0, $afterCheckout, 'Stok belum boleh berkurang saat checkout');
         $this->assertSame(90.0, $afterProses, "Stok setelah checkout = {$afterCheckout}, setelah Proses = {$afterProses} (terpotong dobel)");
     }
 

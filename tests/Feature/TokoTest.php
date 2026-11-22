@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\CartItem;
 use App\Models\Product;
 use App\Models\Role;
+use App\Models\Sale;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -21,10 +22,10 @@ class TokoTest extends TestCase
 
         $role = Role::create(['role_name' => 'Pembeli']);
         $this->pembeli = User::create([
-            'name'     => 'Pembeli Test',
-            'email'    => 'pembeli@test.com',
+            'name' => 'Pembeli Test',
+            'email' => 'pembeli@test.com',
             'password' => bcrypt('password'),
-            'role_id'  => $role->id,
+            'role_id' => $role->id,
         ]);
     }
 
@@ -39,29 +40,29 @@ class TokoTest extends TestCase
     public function test_pembeli_can_tambah_keranjang()
     {
         $product = Product::create([
-            'product_name'         => 'Produk Test',
-            'brand'                => 'Brand Test',
-            'default_buy_price'    => 10000,
+            'product_name' => 'Produk Test',
+            'brand' => 'Brand Test',
+            'default_buy_price' => 10000,
             'default_buy_discount' => 0,
-            'sale_price'           => 15000,
-            'sale_unit'            => 'Lusin',
-            'purchase_unit'        => 'Dus',
-            'dus_to_unit'          => 12,
-            'stock'                => 24,
+            'sale_price' => 15000,
+            'sale_unit' => 'Lusin',
+            'purchase_unit' => 'Dus',
+            'dus_to_unit' => 12,
+            'stock' => 24,
         ]);
 
         $response = $this->actingAs($this->pembeli)
             ->post(route('toko.keranjang.tambah'), [
                 'product_id' => $product->id,
-                'quantity'   => 1,
-                'unit'       => 'Lusin',
+                'quantity' => 1,
+                'unit' => 'Lusin',
             ]);
 
         $response->assertRedirect();
         $this->assertDatabaseHas('cart_items', [
-            'user_id'    => $this->pembeli->id,
+            'user_id' => $this->pembeli->id,
             'product_id' => $product->id,
-            'unit'       => 'Lusin',
+            'unit' => 'Lusin',
         ]);
     }
 
@@ -73,22 +74,22 @@ class TokoTest extends TestCase
         // exactly as entered (1 Kodi, not converted into Lusin terms), and
         // the price is recalculated per Kodi: 15000 * (20/12) = 25000.
         $product = Product::create([
-            'product_name'         => 'Produk Test Kodi',
-            'brand'                => 'Brand Test',
-            'default_buy_price'    => 10000,
+            'product_name' => 'Produk Test Kodi',
+            'brand' => 'Brand Test',
+            'default_buy_price' => 10000,
             'default_buy_discount' => 0,
-            'sale_price'           => 15000,
-            'sale_unit'            => 'Lusin',
-            'purchase_unit'        => 'Dus',
-            'dus_to_unit'          => 12,
-            'stock'                => 24,
+            'sale_price' => 15000,
+            'sale_unit' => 'Lusin',
+            'purchase_unit' => 'Dus',
+            'dus_to_unit' => 12,
+            'stock' => 24,
         ]);
 
         $response = $this->actingAs($this->pembeli)
             ->post(route('toko.keranjang.tambah'), [
                 'product_id' => $product->id,
-                'quantity'   => 1,
-                'unit'       => 'Kodi',
+                'quantity' => 1,
+                'unit' => 'Kodi',
             ]);
 
         $response->assertRedirect();
@@ -106,29 +107,29 @@ class TokoTest extends TestCase
     public function test_tambah_keranjang_rejects_quantity_exceeding_stock()
     {
         $product = Product::create([
-            'product_name'         => 'Produk Test Stok Kecil',
-            'brand'                => 'Brand Test',
-            'default_buy_price'    => 10000,
+            'product_name' => 'Produk Test Stok Kecil',
+            'brand' => 'Brand Test',
+            'default_buy_price' => 10000,
             'default_buy_discount' => 0,
-            'sale_price'           => 15000,
-            'sale_unit'            => 'Lusin',
-            'purchase_unit'        => 'Dus',
-            'dus_to_unit'          => 12,
-            'stock'                => 10,
+            'sale_price' => 15000,
+            'sale_unit' => 'Lusin',
+            'purchase_unit' => 'Dus',
+            'dus_to_unit' => 12,
+            'stock' => 10,
         ]);
 
         // 1 Lusin = 12 buah, which exceeds the 10 buah in stock.
         $response = $this->actingAs($this->pembeli)
             ->post(route('toko.keranjang.tambah'), [
                 'product_id' => $product->id,
-                'quantity'   => 1,
-                'unit'       => 'Lusin',
+                'quantity' => 1,
+                'unit' => 'Lusin',
             ]);
 
         $response->assertRedirect();
         $response->assertSessionHas('error');
         $this->assertDatabaseMissing('cart_items', [
-            'user_id'    => $this->pembeli->id,
+            'user_id' => $this->pembeli->id,
             'product_id' => $product->id,
         ]);
     }
@@ -136,70 +137,71 @@ class TokoTest extends TestCase
     public function test_pembeli_can_checkout()
     {
         $product = Product::create([
-            'product_name'         => 'Produk Test',
-            'brand'                => 'Brand Test',
-            'default_buy_price'    => 10000,
+            'product_name' => 'Produk Test',
+            'brand' => 'Brand Test',
+            'default_buy_price' => 10000,
             'default_buy_discount' => 0,
-            'sale_price'           => 15000,
-            'sale_unit'            => 'Lusin',
-            'purchase_unit'        => 'Dus',
-            'dus_to_unit'          => 12,
-            'stock'                => 24,
+            'sale_price' => 15000,
+            'sale_unit' => 'Lusin',
+            'purchase_unit' => 'Dus',
+            'dus_to_unit' => 12,
+            'stock' => 24,
         ]);
 
         // Tambah ke keranjang dulu — 1 Lusin = 12 buah
         $this->actingAs($this->pembeli)
             ->post(route('toko.keranjang.tambah'), [
                 'product_id' => $product->id,
-                'quantity'   => 1,
-                'unit'       => 'Lusin',
+                'quantity' => 1,
+                'unit' => 'Lusin',
             ]);
 
         // Checkout
         $response = $this->actingAs($this->pembeli)
             ->post(route('toko.checkout.proses'), [
-                'nama'           => 'Pembeli Test',
-                'alamat'         => 'Jl. Test No. 1',
-                'catatan'        => null,
+                'nama' => 'Pembeli Test',
+                'alamat' => 'Jl. Test No. 1',
+                'catatan' => null,
                 'payment_method' => 'Cash',
             ]);
 
         $response->assertRedirect(route('toko.pesanan'));
         $this->assertDatabaseHas('sales', [
-            'user_id'    => $this->pembeli->id,
-            'is_new'     => true,
+            'user_id' => $this->pembeli->id,
+            'is_new' => true,
         ]);
 
-        // Stok berkurang dalam base unit (Buah): 24 - (1 Lusin = 12 buah) = 12
-        $this->assertEquals(12, $product->fresh()->stock);
+        // Stok belum berkurang saat checkout — baru dikurangi saat Pemilik
+        // menekan Proses (lihat test_checkout_then_proses_deducts_stock_exactly_once).
+        $this->assertEquals(24, $product->fresh()->stock);
 
         $this->assertDatabaseHas('sale_details', [
             'product_id' => $product->id,
-            'unit'       => 'Lusin',
+            'unit' => 'Lusin',
         ]);
     }
 
     public function test_checkout_with_insufficient_stock_keeps_cart_intact()
     {
         $productA = Product::create([
-            'product_name'         => 'Produk Aman',
-            'sale_price'           => 15000,
-            'sale_unit'            => 'Buah',
-            'purchase_unit'        => 'Dus',
-            'dus_to_unit'          => 1,
-            'stock'                => 50,
-            'default_buy_price'    => 10000,
+            'product_name' => 'Produk Aman',
+            'sale_price' => 15000,
+            'sale_unit' => 'Buah',
+            'purchase_unit' => 'Dus',
+            'dus_to_unit' => 1,
+            'stock' => 50,
+            'default_buy_price' => 10000,
             'default_buy_discount' => 0,
         ]);
 
         $productB = Product::create([
-            'product_name'         => 'Produk Stok Kurang',
-            'sale_price'           => 20000,
-            'sale_unit'            => 'Buah',
-            'purchase_unit'        => 'Dus',
-            'dus_to_unit'          => 1,
-            'stock'                => 10,
-            'default_buy_price'    => 12000,
+            'product_name' => 'Produk Stok Kurang',
+            'sale_price' => 20000,
+            'sale_unit' => 'Buah',
+            'purchase_unit' => 'Dus',
+            'dus_to_unit' => 1,
+            'stock' => 10,
+            'default_buy_price' => 12000,
             'default_buy_discount' => 0,
         ]);
 
@@ -239,22 +241,22 @@ class TokoTest extends TestCase
     public function test_pesanan_saya_shows_only_own_orders()
     {
         $otherPembeli = User::create([
-            'name'     => 'Pembeli Lain',
-            'email'    => 'pembeli2@test.com',
+            'name' => 'Pembeli Lain',
+            'email' => 'pembeli2@test.com',
             'password' => bcrypt('password'),
-            'role_id'  => $this->pembeli->role_id,
+            'role_id' => $this->pembeli->role_id,
         ]);
 
         $product = Product::create([
-            'product_name'         => 'Produk Pesanan',
-            'brand'                => 'Brand Test',
-            'default_buy_price'    => 10000,
+            'product_name' => 'Produk Pesanan',
+            'brand' => 'Brand Test',
+            'default_buy_price' => 10000,
             'default_buy_discount' => 0,
-            'sale_price'           => 15000,
-            'sale_unit'            => 'Buah',
-            'purchase_unit'        => 'Dus',
-            'dus_to_unit'          => 1,
-            'stock'                => 100,
+            'sale_price' => 15000,
+            'sale_unit' => 'Buah',
+            'purchase_unit' => 'Dus',
+            'dus_to_unit' => 1,
+            'stock' => 100,
         ]);
 
         // Order milik $this->pembeli
@@ -279,9 +281,9 @@ class TokoTest extends TestCase
         $response->assertSee('Riwayat Pesanan Saya');
         $response->assertSee('Lihat Detail');
 
-        $sales = \App\Models\Sale::where('user_id', $this->pembeli->id)->get();
+        $sales = Sale::where('user_id', $this->pembeli->id)->get();
         $this->assertCount(1, $sales);
-        $otherSales = \App\Models\Sale::where('user_id', $otherPembeli->id)->get();
+        $otherSales = Sale::where('user_id', $otherPembeli->id)->get();
         $this->assertCount(1, $otherSales);
     }
 
@@ -296,15 +298,15 @@ class TokoTest extends TestCase
     public function test_cart_survives_logout_and_login()
     {
         $product = Product::create([
-            'product_name'         => 'Produk Persisten',
-            'brand'                => 'Brand Test',
-            'default_buy_price'    => 10000,
+            'product_name' => 'Produk Persisten',
+            'brand' => 'Brand Test',
+            'default_buy_price' => 10000,
             'default_buy_discount' => 0,
-            'sale_price'           => 15000,
-            'sale_unit'            => 'Buah',
-            'purchase_unit'        => 'Dus',
-            'dus_to_unit'          => 1,
-            'stock'                => 50,
+            'sale_price' => 15000,
+            'sale_unit' => 'Buah',
+            'purchase_unit' => 'Dus',
+            'dus_to_unit' => 1,
+            'stock' => 50,
         ]);
 
         $this->actingAs($this->pembeli)->post(route('toko.keranjang.tambah'), [
@@ -324,10 +326,10 @@ class TokoTest extends TestCase
         $response->assertSee('45.000'); // 3 x 15.000, subtotal still correct
 
         $this->assertDatabaseHas('cart_items', [
-            'user_id'    => $this->pembeli->id,
+            'user_id' => $this->pembeli->id,
             'product_id' => $product->id,
-            'quantity'   => 3,
-            'unit'       => 'Buah',
+            'quantity' => 3,
+            'unit' => 'Buah',
         ]);
     }
 
@@ -339,13 +341,13 @@ class TokoTest extends TestCase
         ]);
 
         $product = Product::create([
-            'product_name'         => 'Produk Bersama',
-            'sale_price'           => 15000,
-            'sale_unit'            => 'Buah',
-            'purchase_unit'        => 'Dus',
-            'dus_to_unit'          => 1,
-            'stock'                => 50,
-            'default_buy_price'    => 10000,
+            'product_name' => 'Produk Bersama',
+            'sale_price' => 15000,
+            'sale_unit' => 'Buah',
+            'purchase_unit' => 'Dus',
+            'dus_to_unit' => 1,
+            'stock' => 50,
+            'default_buy_price' => 10000,
             'default_buy_discount' => 0,
         ]);
 
@@ -373,15 +375,181 @@ class TokoTest extends TestCase
     {
         $role = Role::create(['role_name' => 'Pemilik']);
         $pemilik = User::create([
-            'name'     => 'Pemilik Test',
-            'email'    => 'pemilik@test.com',
+            'name' => 'Pemilik Test',
+            'email' => 'pemilik@test.com',
             'password' => bcrypt('password'),
-            'role_id'  => $role->id,
+            'role_id' => $role->id,
         ]);
 
         $response = $this->actingAs($pemilik)
             ->get(route('toko.index'));
 
         $response->assertStatus(403);
+    }
+
+    // ─── Stok pesanan toko online hanya dipotong sekali, saat Proses ─────────
+
+    public function test_checkout_then_proses_deducts_stock_exactly_once(): void
+    {
+        $product = $this->stockedProduct(24);
+        $sale = $this->checkoutOneLusin($product);
+
+        $this->assertEquals(24, $product->fresh()->stock, 'Checkout belum boleh memotong stok');
+
+        $this->actingAs($this->pemilik())
+            ->patch(route('sales.tandai-diproses', $sale->sale_id))
+            ->assertRedirect(route('dashboard'))
+            ->assertSessionHas('success');
+
+        // 24 - (1 Lusin = 12 buah) = 12
+        $this->assertEquals(12, $product->fresh()->stock);
+        $this->assertFalse((bool) $sale->fresh()->is_new);
+    }
+
+    public function test_clicking_proses_twice_does_not_deduct_stock_twice(): void
+    {
+        $product = $this->stockedProduct(36);
+        $sale = $this->checkoutOneLusin($product);
+        $pemilik = $this->pemilik();
+
+        $this->actingAs($pemilik)->patch(route('sales.tandai-diproses', $sale->sale_id));
+        $this->actingAs($pemilik)
+            ->patch(route('sales.tandai-diproses', $sale->sale_id))
+            ->assertRedirect(route('dashboard'))
+            ->assertSessionHas('error');
+
+        $this->assertEquals(24, $product->fresh()->stock);
+    }
+
+    public function test_checkout_still_rejects_quantity_exceeding_stock(): void
+    {
+        $product = $this->stockedProduct(24);
+
+        CartItem::create([
+            'user_id' => $this->pembeli->id,
+            'product_id' => $product->id,
+            'quantity' => 3,
+            'unit' => 'Lusin',
+            'price' => 15000,
+            'subtotal' => 45000,
+        ]);
+
+        $this->actingAs($this->pembeli)
+            ->post(route('toko.checkout.proses'), $this->checkoutPayload())
+            ->assertRedirect(route('toko.keranjang'))
+            ->assertSessionHas('error');
+
+        $this->assertDatabaseCount('sales', 0);
+        $this->assertEquals(24, $product->fresh()->stock);
+    }
+
+    public function test_deleting_unprocessed_online_order_does_not_restore_stock(): void
+    {
+        $product = $this->stockedProduct(24);
+        $sale = $this->checkoutOneLusin($product);
+
+        $this->actingAs($this->pemilik())
+            ->delete(route('sales.destroy', $sale->sale_id))
+            ->assertRedirect(route('sales.index'));
+
+        $this->assertDatabaseMissing('sales', ['sale_id' => $sale->sale_id]);
+        $this->assertEquals(24, $product->fresh()->stock);
+    }
+
+    public function test_deleting_processed_online_order_restores_stock(): void
+    {
+        $product = $this->stockedProduct(24);
+        $sale = $this->checkoutOneLusin($product);
+        $pemilik = $this->pemilik();
+
+        $this->actingAs($pemilik)->patch(route('sales.tandai-diproses', $sale->sale_id));
+        $this->assertEquals(12, $product->fresh()->stock);
+
+        $this->actingAs($pemilik)->delete(route('sales.destroy', $sale->sale_id));
+
+        $this->assertEquals(24, $product->fresh()->stock);
+    }
+
+    public function test_editing_unprocessed_online_order_leaves_stock_for_proses(): void
+    {
+        $product = $this->stockedProduct(36);
+        $sale = $this->checkoutOneLusin($product);
+        $pemilik = $this->pemilik();
+
+        // Ubah pesanan jadi 2 Lusin sebelum diproses.
+        $this->actingAs($pemilik)
+            ->put(route('sales.update', $sale->sale_id), [
+                'sale_date' => now()->format('Y-m-d'),
+                'payment_method' => 'Cash',
+                'payment_status' => 'Lunas',
+                'product_id' => [$product->id],
+                'quantity' => [2],
+                'price' => [15000],
+                'discount' => [0],
+                'unit' => ['Lusin'],
+            ])
+            ->assertRedirect(route('sales.show', $sale->sale_id));
+
+        $this->assertEquals(36, $product->fresh()->stock, 'Edit pesanan yang belum diproses tidak boleh mengubah stok');
+
+        $this->actingAs($pemilik)->patch(route('sales.tandai-diproses', $sale->sale_id));
+
+        // 36 - (2 Lusin = 24 buah) = 12
+        $this->assertEquals(12, $product->fresh()->stock);
+    }
+
+    private function stockedProduct(float $stock): Product
+    {
+        return Product::create([
+            'product_name' => 'Produk Test',
+            'brand' => 'Brand Test',
+            'default_buy_price' => 10000,
+            'default_buy_discount' => 0,
+            'sale_price' => 15000,
+            'sale_unit' => 'Lusin',
+            'purchase_unit' => 'Dus',
+            'dus_to_unit' => 12,
+            'stock' => $stock,
+        ]);
+    }
+
+    private function checkoutOneLusin(Product $product): Sale
+    {
+        $this->actingAs($this->pembeli)
+            ->post(route('toko.keranjang.tambah'), [
+                'product_id' => $product->id,
+                'quantity' => 1,
+                'unit' => 'Lusin',
+            ]);
+
+        $this->actingAs($this->pembeli)
+            ->post(route('toko.checkout.proses'), $this->checkoutPayload())
+            ->assertRedirect(route('toko.pesanan'));
+
+        return Sale::where('user_id', $this->pembeli->id)->latest('sale_id')->firstOrFail();
+    }
+
+    /**
+     * @return array{nama: string, alamat: string, catatan: null, payment_method: string}
+     */
+    private function checkoutPayload(): array
+    {
+        return [
+            'nama' => 'Pembeli Test',
+            'alamat' => 'Jl. Test No. 1',
+            'catatan' => null,
+            'payment_method' => 'Cash',
+        ];
+    }
+
+    private function pemilik(): User
+    {
+        $role = Role::firstOrCreate(['role_name' => 'Pemilik']);
+
+        return User::firstOrCreate(['email' => 'pemilik@test.com'], [
+            'name' => 'Pemilik Test',
+            'password' => bcrypt('password'),
+            'role_id' => $role->id,
+        ]);
     }
 }

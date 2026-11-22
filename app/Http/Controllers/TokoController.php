@@ -9,7 +9,6 @@ use App\Models\ProductView;
 use App\Models\Sale;
 use App\Models\SaleDetail;
 use App\Services\UnitConverter;
-
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -25,14 +24,14 @@ class TokoController extends Controller
         $filter = $request->get('filter');
 
         $products = Product::available()
-            ->when($search, fn($q) => $q->whereRaw('LOWER(product_name) LIKE ?', ['%' . strtolower($search) . '%']))
+            ->when($search, fn ($q) => $q->whereRaw('LOWER(product_name) LIKE ?', ['%'.strtolower($search).'%']))
             // ?filter=baru — same "new" definition as the navbar badge, so
             // clicking the badge shows exactly the products it counted.
-            ->when($filter === 'baru', fn($q) => $q->newProducts()->unseenBy(Auth::id()))
+            ->when($filter === 'baru', fn ($q) => $q->newProducts()->unseenBy(Auth::id()))
             // Eager-loaded per the logged-in Pembeli only, so the "Baru"
             // ribbon (index.blade.php checks $product->views->isEmpty())
             // doesn't cost an extra query per card.
-            ->with(['views' => fn($q) => $q->where('user_id', Auth::id())])
+            ->with(['views' => fn ($q) => $q->where('user_id', Auth::id())])
             ->orderBy('product_name')
             ->paginate(12)
             ->withQueryString();
@@ -61,7 +60,7 @@ class TokoController extends Controller
     public function keranjang()
     {
         $keranjang = CartItem::with('product')->where('user_id', Auth::id())->get();
-        $total     = $keranjang->sum('subtotal');
+        $total = $keranjang->sum('subtotal');
 
         return view('toko.keranjang', compact('keranjang', 'total'));
     }
@@ -70,13 +69,13 @@ class TokoController extends Controller
     {
         $request->validate([
             'product_id' => 'required|exists:products,id',
-            'quantity'   => 'required|numeric|min:0.25',
-            'unit'       => 'required|in:Buah,Lusin,Kodi,Gross',
+            'quantity' => 'required|numeric|min:0.25',
+            'unit' => 'required|in:Buah,Lusin,Kodi,Gross',
         ]);
 
         $product = Product::findOrFail($request->product_id);
-        $unit    = $request->unit;
-        $userId  = Auth::id();
+        $unit = $request->unit;
+        $userId = Auth::id();
 
         // One row per user+product+unit (see the cart_items migration's
         // unique constraint) — the same product added in two different
@@ -179,13 +178,13 @@ class TokoController extends Controller
     public function prosesCheckout(Request $request)
     {
         $request->validate([
-            'nama'           => 'required|string|max:255',
-            'alamat'         => 'nullable|string',
-            'catatan'        => 'nullable|string',
+            'nama' => 'required|string|max:255',
+            'alamat' => 'nullable|string',
+            'catatan' => 'nullable|string',
             'payment_method' => 'required|in:Cash,Transfer,Utang',
         ]);
 
-        $userId    = Auth::id();
+        $userId = Auth::id();
         $keranjang = CartItem::with('product')->where('user_id', $userId)->get();
 
         if ($keranjang->isEmpty()) {
@@ -220,35 +219,32 @@ class TokoController extends Controller
                 $customer = Customer::where('customer_name', Auth::user()->name)->first();
 
                 // Simpan sale
-                $sale = new Sale();
-                $sale->customer_id    = $customer?->id ?? null;
-                $sale->user_id        = $userId;
-                $sale->sale_date      = now()->toDateString();
+                $sale = new Sale;
+                $sale->customer_id = $customer?->id ?? null;
+                $sale->user_id = $userId;
+                $sale->sale_date = now()->toDateString();
                 $sale->payment_method = $request->payment_method;
                 $sale->payment_status = 'Belum Bayar';
-                $sale->total_amount   = $total;
-                $sale->is_new         = true;
-                $sale->notes          = "Pembeli: {$request->nama}" .
-                                        ($request->alamat ? " | Alamat: {$request->alamat}" : '') .
+                $sale->total_amount = $total;
+                $sale->is_new = true;
+                $sale->notes = "Pembeli: {$request->nama}".
+                                        ($request->alamat ? " | Alamat: {$request->alamat}" : '').
                                         ($request->catatan ? " | Catatan: {$request->catatan}" : '');
                 $sale->save();
 
-                // Simpan detail + kurangi stok
+                // Simpan detail. Stok TIDAK dikurangi di sini — baru dikurangi
+                // sekali saat Pemilik menekan "Proses" di dashboard (lihat
+                // SaleController::tandaiDiproses), sama seperti pesanan WhatsApp.
                 foreach ($keranjang as $item) {
-                    $product = $item->product;
-
-                    $detail = new SaleDetail();
-                    $detail->sale_id    = $sale->sale_id;
+                    $detail = new SaleDetail;
+                    $detail->sale_id = $sale->sale_id;
                     $detail->product_id = $item->product_id;
-                    $detail->quantity   = $item->quantity;
-                    $detail->unit       = $item->unit;
-                    $detail->price      = $item->price;
-                    $detail->discount   = 0;
-                    $detail->subtotal   = $item->subtotal;
+                    $detail->quantity = $item->quantity;
+                    $detail->unit = $item->unit;
+                    $detail->price = $item->price;
+                    $detail->discount = 0;
+                    $detail->subtotal = $item->subtotal;
                     $detail->save();
-
-                    $product->stock -= UnitConverter::toBaseUnit((float) $item->quantity, $item->unit, $product);
-                    $product->save();
                 }
 
                 // Cart only cleared once every row above has committed.

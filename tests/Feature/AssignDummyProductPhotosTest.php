@@ -205,4 +205,148 @@ class AssignDummyProductPhotosTest extends TestCase
         $this->assertNull($product->fresh()->image_path);
         Http::assertNothingSent();
     }
+
+    // ─── --all ─────────────────────────────────────────────────────────────
+
+    /**
+     * @return list<string>
+     */
+    private function backupFiles(): array
+    {
+        return glob($this->storageDir.'/app/backup-foto-produk-*.csv') ?: [];
+    }
+
+    /**
+     * @return list<array{0: string, 1: string, 2: string}>
+     */
+    private function backupRows(): array
+    {
+        $files = $this->backupFiles();
+        $this->assertCount(1, $files);
+
+        $handle = fopen($files[0], 'r');
+        $rows = [];
+        while (($row = fgetcsv($handle)) !== false) {
+            $rows[] = $row;
+        }
+        fclose($handle);
+
+        return $rows;
+    }
+
+    public function test_without_options_products_with_photo_are_untouched(): void
+    {
+        $withPath = $this->product('TOPLES', 'products/asli.jpg');
+        $withLegacy = $this->product('PIRING', null, 'piring.jpg');
+        $without = $this->product('EMBER 10L');
+
+        $this->artisan('products:assign-dummy-photos')
+            ->expectsOutputToContain('1 produk tanpa foto akan diberi foto contoh')
+            ->assertSuccessful();
+
+        $this->assertSame('products/asli.jpg', $withPath->fresh()->image_path);
+        $this->assertNull($withLegacy->fresh()->image_path);
+        $this->assertNull($without->fresh()->image_path);
+        $this->assertSame([], $this->backupFiles());
+        Http::assertNothingSent();
+    }
+
+    public function test_all_dry_run_lists_old_paths_and_changes_nothing(): void
+    {
+        $withPath = $this->product('TOPLES', 'products/asli.jpg');
+        $without = $this->product('EMBER 10L');
+        $this->product('BASKOM', AssignDummyProductPhotos::STORAGE_PATH);
+
+        $this->artisan('products:assign-dummy-photos --all --dry-run')
+            ->expectsOutputToContain('2 produk akan diganti fotonya')
+            ->expectsTable(['ID', 'Nama', 'image_path lama'], [
+                [$withPath->id, 'TOPLES', 'products/asli.jpg'],
+                [$without->id, 'EMBER 10L', '-'],
+            ])
+            ->assertSuccessful();
+
+        $this->assertSame('products/asli.jpg', $withPath->fresh()->image_path);
+        $this->assertNull($without->fresh()->image_path);
+        $this->assertSame([], $this->backupFiles());
+        $this->assertFileDoesNotExist($this->logFile());
+        Http::assertNothingSent();
+    }
+
+    public function test_all_replaces_every_product_photo_and_deletes_no_storage_file(): void
+    {
+        $withPath = $this->product('TOPLES', 'products/asli.jpg');
+        $withLegacy = $this->product('PIRING', null, 'piring.jpg');
+        $without = $this->product('EMBER 10L');
+
+        $this->artisan('products:assign-dummy-photos --all')
+            ->expectsOutputToContain('3 produk diberi foto contoh')
+            ->assertSuccessful();
+
+        foreach ([$withPath, $withLegacy, $without] as $product) {
+            $this->assertSame(AssignDummyProductPhotos::STORAGE_PATH, $product->fresh()->image_path);
+        }
+
+        // Only the placeholder upload — no DELETE of the old photos (or anything else).
+        Http::assertSentCount(1);
+        Http::assertSent(fn (HttpRequest $r) => $r->method() === 'POST' && $r->url() === self::OBJECT_URL);
+        Http::assertNotSent(fn (HttpRequest $r) => $r->method() === 'DELETE');
+    }
+
+    public function test_backup_csv_holds_old_image_paths(): void
+    {
+        $this->travelTo(now()->setDate(2026, 11, 25)->setTime(3, 4, 5)); // 10:04:05 WIB
+        $withPath = $this->product('TOPLES, KACA', 'products/asli.jpg');
+        $without = $this->product('EMBER 10L');
+
+        $this->artisan('products:assign-dummy-photos --all')->assertSuccessful();
+
+        $this->assertSame(['backup-foto-produk-2026-11-25_100405.csv'], array_map('basename', $this->backupFiles()));
+        $this->assertSame([
+            ['id', 'name', 'image_path'],
+            [(string) $withPath->id, 'TOPLES, KACA', 'products/asli.jpg'],
+            [(string) $without->id, 'EMBER 10L', ''],
+        ], $this->backupRows());
+    }
+
+    public function test_failed_backup_csv_stops_before_any_change(): void
+    {
+        $product = $this->product('TOPLES', 'products/asli.jpg');
+
+        // storage/app is a file, so the CSV can't be created there.
+        File::deleteDirectory($this->storageDir.'/app');
+        File::put($this->storageDir.'/app', 'bukan folder');
+
+        $this->artisan('products:assign-dummy-photos --all')
+            ->expectsOutputToContain('Gagal menulis CSV cadangan')
+            ->assertFailed();
+
+        $this->assertSame('products/asli.jpg', $product->fresh()->image_path);
+        Http::assertNothingSent();
+    }
+
+    public function test_undo_after_all_restores_old_photos_and_keeps_their_files(): void
+    {
+        $withPath = $this->product('TOPLES', 'products/asli.jpg');
+        $without = $this->product('EMBER 10L');
+
+        $this->artisan('products:assign-dummy-photos --all')->assertSuccessful();
+        $this->artisan('products:assign-dummy-photos --undo')
+            ->expectsOutputToContain('1 produk dikembalikan tanpa foto')
+            ->expectsOutputToContain('1 produk dikembalikan ke foto lamanya')
+            ->assertSuccessful();
+
+        $this->assertSame('products/asli.jpg', $withPath->fresh()->image_path);
+        $this->assertNull($without->fresh()->image_path);
+        Http::assertNotSent(fn (HttpRequest $r) => $r->method() === 'DELETE' && str_contains($r->url(), 'asli.jpg'));
+    }
+
+    public function test_all_and_undo_together_is_rejected(): void
+    {
+        $product = $this->product('TOPLES', 'products/asli.jpg');
+
+        $this->artisan('products:assign-dummy-photos --all --undo')->assertFailed();
+
+        $this->assertSame('products/asli.jpg', $product->fresh()->image_path);
+        Http::assertNothingSent();
+    }
 }

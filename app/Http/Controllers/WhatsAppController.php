@@ -115,6 +115,12 @@ class WhatsAppController extends Controller
 
     private const TRANSFER_PROOF_REPLY = 'Bukti transfer diterima. Admin akan memeriksa dan mengonfirmasi pesanan Anda. Terima kasih 🙏';
 
+    /**
+     * Fixed reply for messages unrelated to the shop (general knowledge,
+     * homework, news, ...); sent without a second GPT call.
+     */
+    public const OFF_TOPIC_REPLY = 'Maaf kak, saya asisten Toko Sentosa dan hanya bisa membantu seputar produk, harga, stok, dan pemesanan di toko kami. Ada barang yang ingin dicari atau dipesan?';
+
     // ─── Entry point ──────────────────────────────────────────────────────────
 
     public function handle(Request $request): Response
@@ -303,6 +309,11 @@ class WhatsAppController extends Controller
                         $session->step = 'confirm_order';
                         $session->save();
                     }
+
+                } elseif ($mode === 'off_topic') {
+                    // Not about the shop: fixed reply, no GPT reply call, and
+                    // cart/step/session data stay exactly as they were.
+                    $reply = self::OFF_TOPIC_REPLY;
 
                 } elseif ($mode === 'bulk' && ! empty($bulkItems)) {
                     [$reply, $productsToShow] = $this->handleBulkOrder($bulkItems, $session);
@@ -721,7 +732,7 @@ class WhatsAppController extends Controller
                     'role' => 'system',
                     'content' => 'Kamu adalah ekstraktor intent pembelian. Analisis pesan pelanggan dan kembalikan JSON:
 {
-  "mode": "bulk" | "chat" | "confirm" | "done" | "cancel",
+  "mode": "bulk" | "chat" | "confirm" | "done" | "cancel" | "off_topic",
   "keywords": ["kata kunci nama produk dari pesan"],
   "bulk_items": [{"item": "nama produk", "qty": angka, "unit": "satuan"}]
 }
@@ -732,6 +743,7 @@ Panduan mode:
 - "confirm": setuju/konfirmasi pesanan ("ya", "iya", "ok", "setuju", "benar", "lanjut")
 - "done": selesai memilih ("udah", "cukup", "itu saja", "sudah", "selesai", "segitu saja")
 - "cancel": batalkan ("batal", "cancel", "tidak jadi")
+- "off_topic": pesan yang TIDAK berkaitan dengan Toko Sentosa (produk, harga, stok, pemesanan, pengiriman, pembayaran, informasi toko), misalnya pengetahuan umum ("siapa penemu gravitasi"), tugas sekolah, berita, politik, resep, curhat, atau minta dibuatkan tulisan. Sapaan dan basa-basi singkat ("halo", "selamat pagi", "terima kasih", "ok kak") BUKAN off_topic, tetap "chat".
 
 ⚠️ ATURAN WAJIB:
 - Jika pesan mengandung koma (,) dan setiap bagian berisi nama produk + angka → mode HARUS "bulk"
@@ -836,6 +848,11 @@ Panduan:
 - Cara memesan yang benar: pelanggan mengetik nama produk + jumlah + satuan (contoh: \"TOPLES JUMBO SEALWARE 25 KG 2 lusin\"). Jika kamu baru menampilkan SATU produk, pelanggan cukup membalas jumlah dan satuan (contoh: \"2 lusin\"). JANGAN pernah membuat perintah atau format lain seperti \"ketik 'pesan'\", kode, atau nomor perintah.
 - Jika pelanggan bertanya produk apa saja yang tersedia (contoh: ada apa, ada barang apa, produk apa saja, ada apa lagi), tampilkan MAKSIMAL 10 produk saja dalam format singkat satu baris: \`- Nama Produk - Rp harga/satuan\`, lalu tambahkan catatan (ketik nama produk untuk info lebih detail). JANGAN tampilkan semua produk sekaligus karena akan terlalu panjang.
 - Jawab singkat dan ramah dalam Bahasa Indonesia.
+
+BATASAN TOPIK:
+- Kamu HANYA membantu urusan Toko Sentosa: produk, harga, stok, pemesanan, pengiriman, pembayaran, dan informasi toko.
+- Jika pertanyaan di luar itu (pengetahuan umum, tugas sekolah, berita, politik, resep, curhat, minta dibuatkan tulisan, dll), JANGAN menjawab isinya sama sekali. Balas dengan sopan bahwa kamu hanya bisa membantu seputar produk dan pemesanan di Toko Sentosa, lalu tawarkan bantuan mencari produk.
+- Untuk pertanyaan di luar topik, kosongkan show_products dan cart_add.
 
 Balas dalam format JSON:
 {

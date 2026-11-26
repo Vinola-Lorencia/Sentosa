@@ -1,4 +1,5 @@
-<div x-data="{ sidebarOpen: false }">
+{{-- sidebarOpen / desktopOpen come from adminSidebar() on the wrapper in layouts/app.blade.php. --}}
+<div>
 
     <!-- STYLE UNTUK ALPINE CLOAK -->
     <style>
@@ -13,11 +14,13 @@
             <span class="text-lg font-semibold text-slate-900">Sentosa</span>
         </a>
 
-        <button @click="sidebarOpen = !sidebarOpen"
+        <button type="button" @click="sidebarOpen = !sidebarOpen"
+            aria-label="Tampilkan atau sembunyikan menu" aria-controls="admin-sidebar"
+            aria-expanded="false" :aria-expanded="sidebarOpen.toString()"
             class="inline-flex items-center justify-center p-2 rounded-md text-slate-500 hover:text-slate-900 hover:bg-slate-100 focus:outline-none">
 
             <!-- ICON MENU -->
-            <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                 <path :class="{ 'hidden': sidebarOpen, 'inline-flex': !sidebarOpen }" class="inline-flex"
                     stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                     d="M4 6h16M4 12h16M4 18h16"></path>
@@ -42,11 +45,12 @@
     </div>
 
     <!-- SIDEBAR — fixed at every breakpoint: off-canvas + slide-in on mobile
-         (toggled by sidebarOpen), always visible on desktop (lg:translate-x-0).
-         The main content column reserves space for it via lg:ml-64 instead of
-         relying on normal document flow, so this never needs to leave
-         `fixed` positioning between breakpoints. -->
-    <aside
+         (toggled by sidebarOpen), visible on desktop (lg:translate-x-0) unless
+         hidden with the header's hamburger (html.sidebar-closed, see the
+         <style> in layouts/app.blade.php). The main content column reserves
+         space for it via lg:ml-64 instead of relying on normal document flow,
+         so this never needs to leave `fixed` positioning between breakpoints. -->
+    <aside id="admin-sidebar"
         :class="sidebarOpen ? 'translate-x-0' : '-translate-x-full'"
         class="fixed inset-y-0 left-0 z-40 w-64 flex flex-col bg-white border-r border-gray-200
             transform transition-transform duration-200 ease-in-out
@@ -65,7 +69,7 @@
             </a>
 
             <!-- Close button (mobile only) -->
-            <button @click="sidebarOpen = false" class="lg:hidden text-slate-400 hover:text-slate-700">
+            <button type="button" @click="sidebarOpen = false" aria-label="Tutup menu" class="lg:hidden text-slate-400 hover:text-slate-700">
                 <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
                 </svg>
@@ -234,7 +238,7 @@
                 {{ Auth::user()->email ?? '' }}
             </p>
 
-            <div class="mt-3 space-y-2">
+            <div class="mt-3 space-y-2" @click="sidebarOpen = false">
 
                 <a href="{{ route('profile.edit') }}"
                     class="block px-3 py-2 rounded-xl text-sm hover:bg-slate-100">

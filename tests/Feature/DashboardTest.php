@@ -29,6 +29,26 @@ class DashboardTest extends TestCase
         $response->assertStatus(200);
     }
 
+    public function test_admin_layout_shows_sidebar_hamburger_toggle(): void
+    {
+        $role = Role::create(['role_name' => 'Pemilik']);
+        $user = User::create([
+            'name' => 'Pemilik Test',
+            'email' => 'pemilik@test.com',
+            'password' => bcrypt('password'),
+            'role_id' => $role->id,
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('dashboard'))
+            ->assertOk()
+            ->assertSee('id="admin-sidebar"', false)
+            ->assertSee('@click="toggleDesktop()"', false)
+            ->assertSee('aria-label="Tampilkan atau sembunyikan menu" aria-controls="admin-sidebar"', false)
+            ->assertSee(':aria-expanded="desktopOpen.toString()"', false)
+            ->assertSee(':aria-expanded="sidebarOpen.toString()"', false);
+    }
+
     public function test_pembeli_cannot_view_dashboard()
     {
         $role = Role::create(['role_name' => 'Pembeli']);
